@@ -71,7 +71,6 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./
           publish_branch: gh-pages
-          # 只发布 dashboard.html 和必要的静态资源
           force_orphan: true
           user_name: 'nasdaq-signal-bot'
           user_email: 'bot@nasdaq-signal.local'
