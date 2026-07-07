@@ -1,10 +1,10 @@
 name: Daily Update & Push
 
 on:
-  # 定时触发：北京时间 06:30 = UTC 22:30（前一天）
-  # cron 使用 UTC 时间，北京 06:30 = UTC 22:30
+  # 定时触发：北京时间 08:00 = UTC 00:00
+  # cron 使用 UTC 时间，北京 08:00 = UTC 00:00
   schedule:
-    - cron: '30 22 * * *'
+    - cron: '0 0 * * *'
 
   # 手动触发（GitHub 页面点击 "Run workflow"）
   workflow_dispatch:
