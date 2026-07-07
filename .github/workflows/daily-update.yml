@@ -1,0 +1,79 @@
+name: Daily Update & Push
+
+on:
+  # 定时触发：北京时间 06:30 = UTC 22:30（前一天）
+  # cron 使用 UTC 时间，北京 06:30 = UTC 22:30
+  schedule:
+    - cron: '30 22 * * *'
+
+  # 手动触发（GitHub 页面点击 "Run workflow"）
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '运行模式: daily / alert / no_trade'
+        required: false
+        default: 'daily'
+
+  # push 到 main 分支时也触发（调试用）
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+      - '.gitignore'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run daily task
+        env:
+          WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
+        run: |
+          python daily_task.py
+
+      - name: Commit and push data changes
+        run: |
+          git config user.name "nasdaq-signal-bot"
+          git config user.email "bot@nasdaq-signal.local"
+
+          # 只 commit 数据文件变更
+          git add dashboard_data.json dashboard.html || true
+
+          # 检查是否有变更
+          if git diff --staged --quiet; then
+            echo "No data changes to commit"
+          else
+            DATE=$(date -u +%Y-%m-%d)
+            git commit -m "auto: update dashboard data ${DATE}"
+            git push
+          fi
+
+      - name: Deploy to GitHub Pages
+        if: success()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
+          publish_branch: gh-pages
+          # 只发布 dashboard.html 和必要的静态资源
+          force_orphan: true
+          user_name: 'nasdaq-signal-bot'
+          user_email: 'bot@nasdaq-signal.local'
+          commit_message: 'deploy: update dashboard'
