@@ -557,30 +557,51 @@ def compute_daily_qqq_pe(daily_dates, daily_qqq_prices, qqq_pe_monthly_map, qqq_
 # 信号判断
 # ---------------------------------------------------------------------------
 
+def load_config():
+    """加载 config.yaml，返回配置字典。"""
+    import yaml
+    cfg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")
+    try:
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        print(f"  config.yaml 加载失败: {e}，使用默认阈值")
+        return None
+
+
 def assess_signals(spy_price, spy_dd, vix, cape, qqq_price, qqq_dd, qqq_pe):
-    """根据当前指标值给出仓位建议。"""
-    cfg = {
-        "sp500_thresholds": {"drawdown": -10, "vix": 30, "cape": 30},
-        "nasdaq100_thresholds": {"drawdown": -10, "vix": 30, "qqq_pe": 35},
-    }
+    """根据当前指标值给出仓位建议。阈值从 config.yaml 读取。"""
+    cfg = load_config()
+    if cfg:
+        sp_thr = cfg.get("sp500_thresholds", {})
+        nd_thr = cfg.get("nasdaq100_thresholds", {})
+        sp_dd_thr = sp_thr.get("drawdown", -10.0)
+        sp_vix_thr = sp_thr.get("vix", 22.0)
+        sp_cape_thr = sp_thr.get("cape", 35.0)
+        nd_dd_thr = nd_thr.get("drawdown", -10.0)
+        nd_vix_thr = nd_thr.get("vxn", 22.0)
+        nd_pe_thr = nd_thr.get("qqq_pe", 35.0)
+    else:
+        sp_dd_thr, sp_vix_thr, sp_cape_thr = -10.0, 22.0, 35.0
+        nd_dd_thr, nd_vix_thr, nd_pe_thr = -10.0, 22.0, 35.0
 
     sp_signals = [
-        {"name": "SPY回撤", "triggered": spy_dd <= cfg["sp500_thresholds"]["drawdown"],
-         "value": spy_dd, "threshold": cfg["sp500_thresholds"]["drawdown"]},
-        {"name": "VIX恐慌", "triggered": vix >= cfg["sp500_thresholds"]["vix"],
-         "value": vix, "threshold": cfg["sp500_thresholds"]["vix"]},
-        {"name": "Shiller CAPE", "triggered": cape >= cfg["sp500_thresholds"]["cape"] if cape > 0 else False,
-         "value": cape, "threshold": cfg["sp500_thresholds"]["cape"]},
+        {"name": "SPY回撤", "triggered": spy_dd <= sp_dd_thr,
+         "value": spy_dd, "threshold": sp_dd_thr},
+        {"name": "VIX恐慌", "triggered": vix >= sp_vix_thr,
+         "value": vix, "threshold": sp_vix_thr},
+        {"name": "Shiller CAPE", "triggered": cape >= sp_cape_thr if cape > 0 else False,
+         "value": cape, "threshold": sp_cape_thr},
     ]
     sp_triggered = sum(1 for s in sp_signals if s["triggered"])
 
     nd_signals = [
-        {"name": "QQQ回撤", "triggered": qqq_dd <= cfg["nasdaq100_thresholds"]["drawdown"],
-         "value": qqq_dd, "threshold": cfg["nasdaq100_thresholds"]["drawdown"]},
-        {"name": "VIX恐慌(VXN代理)", "triggered": vix >= cfg["nasdaq100_thresholds"]["vix"],
-         "value": vix, "threshold": cfg["nasdaq100_thresholds"]["vix"]},
-        {"name": "QQQ PE估值", "triggered": qqq_pe >= cfg["nasdaq100_thresholds"]["qqq_pe"] if qqq_pe > 0 else False,
-         "value": qqq_pe, "threshold": cfg["nasdaq100_thresholds"]["qqq_pe"]},
+        {"name": "QQQ回撤", "triggered": qqq_dd <= nd_dd_thr,
+         "value": qqq_dd, "threshold": nd_dd_thr},
+        {"name": "VIX恐慌(VXN代理)", "triggered": vix >= nd_vix_thr,
+         "value": vix, "threshold": nd_vix_thr},
+        {"name": "QQQ PE估值", "triggered": qqq_pe >= nd_pe_thr if qqq_pe > 0 else False,
+         "value": qqq_pe, "threshold": nd_pe_thr},
     ]
     nd_triggered = sum(1 for s in nd_signals if s["triggered"])
 
@@ -764,6 +785,80 @@ def main():
         current_qqq_price, current_qqq_dd, current_qqq_pe,
     )
 
+    # 5b. 计算趋势评分 + 仓位配比（SPY用25级, QQQ用5级+25级预警）
+    print("  计算趋势评分和仓位配比...")
+    sys_path_backup = os.path.dirname(os.path.abspath(__file__))
+    import sys as _sys
+    if sys_path_backup not in _sys.path:
+        _sys.path.insert(0, sys_path_backup)
+    try:
+        from signal_bot import (
+            compute_spy_trend_score, get_spy_allocation,
+            compute_trend_score, get_allocation,
+            format_spy_allocation_str, format_qqq_allocation_str,
+        )
+        cfg = load_config()
+        if cfg is None:
+            cfg = {}
+
+        # SPY 25级趋势评分 + 仓位
+        spy_trend = compute_spy_trend_score(current_spy_dd, current_vix, current_cape, cfg)
+        spy_alloc = get_spy_allocation(spy_trend["step"], cfg)
+        spy_alloc_str = format_spy_allocation_str(spy_alloc)
+
+        # QQQ 25级趋势评分（预警参考）
+        qqq_trend = compute_trend_score(current_qqq_dd, current_vix, current_qqq_pe, cfg)
+        # QQQ 5级仓位
+        nd_triggered = signals["nasdaq100"]["triggered_count"]
+        qqq_alloc = get_allocation(nd_triggered, cfg)
+        qqq_alloc_str = format_qqq_allocation_str(qqq_alloc)
+
+        # 计算昨天的仓位（用于箭头对比）
+        spy_prev_alloc_str = None
+        qqq_prev_alloc_str = None
+        if len(spy_dd) >= 2:
+            prev_spy_dd = spy_dd[-2]
+            prev_vix = vix_values[-2] if len(vix_values) >= 2 else current_vix
+            prev_cape = cape_values[-2] if len(cape_values) >= 2 else current_cape
+            prev_spy_trend = compute_spy_trend_score(prev_spy_dd, prev_vix, prev_cape, cfg)
+            prev_spy_alloc = get_spy_allocation(prev_spy_trend["step"], cfg)
+            spy_prev_alloc_str = format_spy_allocation_str(prev_spy_alloc)
+
+            prev_qqq_dd = qqq_dd[-2] if len(qqq_dd) >= 2 else current_qqq_dd
+            prev_qqq_pe = qqq_pe_values[-2] if len(qqq_pe_values) >= 2 else current_qqq_pe
+            nd_thr = cfg.get("nasdaq100_thresholds", {})
+            prev_triggered = 0
+            if prev_qqq_dd <= nd_thr.get("drawdown", -10.0):
+                prev_triggered += 1
+            if prev_vix >= nd_thr.get("vxn", 22.0):
+                prev_triggered += 1
+            if prev_qqq_pe > 0 and prev_qqq_pe >= nd_thr.get("qqq_pe", 35.0):
+                prev_triggered += 1
+            prev_qqq_alloc = get_allocation(prev_triggered, cfg)
+            qqq_prev_alloc_str = format_qqq_allocation_str(prev_qqq_alloc)
+
+        trend_data = {
+            "spy_trend": spy_trend,
+            "spy_alloc_str": spy_alloc_str,
+            "spy_prev_alloc_str": spy_prev_alloc_str,
+            "spy_alloc_changed": spy_prev_alloc_str is not None and spy_prev_alloc_str != spy_alloc_str,
+            "qqq_trend": qqq_trend,
+            "qqq_alloc_str": qqq_alloc_str,
+            "qqq_prev_alloc_str": qqq_prev_alloc_str,
+            "qqq_alloc_changed": qqq_prev_alloc_str is not None and qqq_prev_alloc_str != qqq_alloc_str,
+        }
+        print(f"  SPY: {spy_trend['score']} (S{spy_trend['step']}) → {spy_alloc_str}")
+        print(f"  QQQ: {qqq_trend['score']} (S{qqq_trend['step']}) → {qqq_alloc_str}")
+        if trend_data["spy_alloc_changed"]:
+            print(f"  SPY仓位变化: {spy_prev_alloc_str} → {spy_alloc_str}")
+        if trend_data["qqq_alloc_changed"]:
+            print(f"  QQQ仓位变化: {qqq_prev_alloc_str} → {qqq_alloc_str}")
+    except Exception as e:
+        print(f"  趋势评分计算失败: {e}")
+        import traceback
+        traceback.print_exc()
+        trend_data = {}
+
     # 6. 计算历史极值 + 关键时刻里程碑
     def find_extremes(values, dates_list):
         max_v = max(values)
@@ -889,6 +984,7 @@ def main():
             "qqq_pe": current_qqq_pe,
             "sp500_signals": signals["sp500"],
             "nasdaq100_signals": signals["nasdaq100"],
+            "trend": trend_data,
         },
     }
 
