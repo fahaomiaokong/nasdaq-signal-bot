@@ -53,8 +53,8 @@ lookback_days: 252
 # 基于纳斯达克100信号级别给出具体TQQQ/QQQ/现金比例
 position_allocation:
   L1: {tqqq: 0.75, qqq: 0.25, cash: 0.00, hint: "满仓进攻"}
-  L2: {tqqq: 0.50, qqq: 0.35, cash: 0.10, hint: "减杠杆偏进攻"}
-  L3: {tqqq: 0.00, qqq: 0.50, cash: 0.30, hint: "去杠杆防守"}
+  L2: {tqqq: 0.50, qqq: 0.40, cash: 0.10, hint: "减杠杆偏进攻"}
+  L3: {tqqq: 0.00, qqq: 0.50, cash: 0.50, hint: "去杠杆防守"}
   L4: {tqqq: 0.00, qqq: 0.25, cash: 0.75, hint: "大幅减仓避险"}
   L5: {tqqq: 0.00, qqq: 0.00, cash: 1.00, hint: "全部撤退"}
 
