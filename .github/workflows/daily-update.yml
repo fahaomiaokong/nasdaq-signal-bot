@@ -14,16 +14,15 @@ on:
         required: false
         default: 'daily'
 
-  # push 到 main 分支时也触发（调试用）
+  # push 到 main 分支时触发（首次部署用）
   push:
     branches: [ main ]
-    paths-ignore:
-      - 'README.md'
-      - '.gitignore'
 
 jobs:
   update:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 允许 push commit 和 gh-pages 部署
 
     steps:
       - name: Checkout code
