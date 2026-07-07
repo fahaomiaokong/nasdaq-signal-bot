@@ -108,6 +108,41 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC
 .events-row .event-val.orange{color:#ff9800}
 .events-row .event-date{font-size:11px;color:#888}
 
+/* === 25级趋势评分速查表 === */
+.trend-section{display:flex;justify-content:center;padding:0 32px 24px}
+.trend-card{background:#fff;border-radius:12px;padding:24px 28px;max-width:1100px;width:100%;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.trend-title{font-size:16px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px;color:#333}
+.trend-subtitle{font-size:12px;color:#888;margin-bottom:16px;line-height:1.5}
+.trend-table-wrap{overflow-x:auto;border-radius:8px;border:1px solid #e8e8e8}
+.trend-table{width:100%;border-collapse:collapse;font-size:13px}
+.trend-table th{background:#f0f2f5;padding:10px 12px;text-align:center;font-weight:700;color:#555;border-bottom:2px solid #ddd;white-space:nowrap}
+.trend-table td{padding:8px 12px;text-align:center;border-bottom:1px solid #f0f0f0;white-space:nowrap}
+.trend-table tr:hover{background:#f5f7fa}
+.trend-table tr.trend-safe{background:#f1f8f4}
+.trend-table tr.trend-safe:hover{background:#e8f5e9}
+.trend-table tr.trend-mild{background:#fefcf5}
+.trend-table tr.trend-mild:hover{background:#fff8e1}
+.trend-table tr.trend-mid{background:#fff8f0}
+.trend-table tr.trend-mid:hover{background:#ffe0b2}
+.trend-table tr.trend-warn{background:#fff5f5}
+.trend-table tr.trend-warn:hover{background:#ffebee}
+.trend-table tr.trend-danger{background:#fff0f0}
+.trend-table tr.trend-danger:hover{background:#ffcdd2}
+.td-step{font-weight:700;color:#333}
+.td-score{color:#666;font-size:12px}
+.td-tqqq{color:#e91e63;font-weight:600}
+.td-qqq{color:#1976d2;font-weight:500}
+.td-cash{color:#388e3c;font-weight:500}
+.td-meaning{color:#555;font-size:12px}
+.trend-legend{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;justify-content:center;font-size:12px}
+.trend-legend-item{display:flex;align-items:center;gap:4px}
+.trend-legend-dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+.trend-legend-dot.safe{background:#c8e6c9}
+.trend-legend-dot.mild{background:#ffecb3}
+.trend-legend-dot.mid{background:#ffcc80}
+.trend-legend-dot.warn{background:#ffcdd2}
+.trend-legend-dot.danger{background:#ef9a9a}
+
 .footer{text-align:center;padding:16px;font-size:12px;color:#999}
 </style>
 </head>
@@ -170,21 +205,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC
         <div class="level-num">L2</div>
         <div class="level-name">75% 仓位</div>
         <div class="level-trigger">1/3 信号触发</div>
-        <div class="level-desc">一个信号亮红灯，市场开始出现风险苗头。减仓1/4，保留大部分仓位但保持警惕。</div>
+        <div class="level-desc">一个信号亮红灯，市场开始出现风险苗头。减杠杆不减仓：TQQQ 50% + QQQ 35% + 现金 10%。</div>
       </div>
       <div class="level-card l3">
         <div class="level-icon">🛡️</div>
         <div class="level-num">L3</div>
         <div class="level-name">50% 仓位</div>
         <div class="level-trigger">2/3 信号触发</div>
-        <div class="level-desc">两个信号同时亮红灯，市场风险明显加大。半仓防守，一半现金观望。</div>
+        <div class="level-desc">两个信号同时亮红灯，市场风险明显加大。去杠杆防守：QQQ 50% + 现金 30%。</div>
       </div>
       <div class="level-card l4">
         <div class="level-icon">🧱</div>
         <div class="level-num">L4</div>
         <div class="level-name">25% 仓位</div>
         <div class="level-trigger">3/3 信号触发</div>
-        <div class="level-desc">三个信号全部亮红灯，市场极度危险。只保留1/4仓位，其余转为现金避风。</div>
+        <div class="level-desc">三个信号全部亮红灯，市场极度危险。QQQ 25% + 现金 75%，大部分转现金避风。</div>
       </div>
       <div class="level-card l5">
         <div class="level-icon">🏃</div>
@@ -210,12 +245,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC
       <div class="ind-explain-item">
         <div class="ind-explain-name">😱 恐慌指数 (VIX)</div>
         <div class="ind-explain-desc">芝加哥期权交易所波动率指数，反映市场对未来30天的恐慌预期。VIX飙升意味着市场极度恐慌。</div>
-        <div class="ind-explain-threshold">阈值: VIX ≥ 30</div>
+        <div class="ind-explain-threshold">阈值: VIX ≥ 22</div>
       </div>
       <div class="ind-explain-item">
         <div class="ind-explain-name">💰 Shiller CAPE</div>
         <div class="ind-explain-desc">耶鲁教授罗伯特·席勒的周期调整市盈率，用10年平均盈利计算PE，消除短期波动干扰，衡量长期估值水平。</div>
-        <div class="ind-explain-threshold">阈值: CAPE ≥ 30</div>
+        <div class="ind-explain-threshold">阈值: CAPE ≥ 35</div>
       </div>
       <div class="ind-explain-item">
         <div class="ind-explain-name">📊 QQQ PE 估值</div>
@@ -268,6 +303,240 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC
     <!-- 关键历史时刻 -->
     <div class="events-title">关键历史时刻</div>
     <div class="events-table" id="events-table"></div>
+  </div>
+</div>
+
+<!-- === 25级趋势评分速查表 === -->
+<div class="trend-section">
+  <div class="trend-card">
+    <div class="trend-title">25级趋势评分速查表</div>
+    <div class="trend-subtitle">
+      趋势评分 = DD风险分 + VIX风险分 + PE风险分，反映市场连续风险水平。评分越高风险越大，仓位逐级递减（每级总仓位-4%）。<br>
+      S1-S3 对应5级方案的 L1 满仓进攻区，S4-S12 对应 L2 偏进攻区，S13-S15 对应 L3 去杠杆区，S16-S21 对应 L4 防守区，S22-S25 对应 L5 避险区。
+    </div>
+    <div class="trend-table-wrap">
+      <table class="trend-table">
+        <thead>
+          <tr>
+            <th>级别</th>
+            <th>评分范围</th>
+            <th>TQQQ</th>
+            <th>QQQ</th>
+            <th>现金</th>
+            <th>含义</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="trend-safe">
+            <td class="td-step">S1</td>
+            <td class="td-score">0.00 - 0.33</td>
+            <td class="td-tqqq">75.0%</td>
+            <td class="td-qqq">25.0%</td>
+            <td class="td-cash">0.0%</td>
+            <td class="td-meaning">满仓杠杆</td>
+          </tr>
+          <tr class="trend-safe">
+            <td class="td-step">S2</td>
+            <td class="td-score">0.33 - 0.66</td>
+            <td class="td-tqqq">65.5%</td>
+            <td class="td-qqq">30.5%</td>
+            <td class="td-cash">4.0%</td>
+            <td class="td-meaning">满仓杠杆</td>
+          </tr>
+          <tr class="trend-safe">
+            <td class="td-step">S3</td>
+            <td class="td-score">0.66 - 0.99</td>
+            <td class="td-tqqq">56.5%</td>
+            <td class="td-qqq">35.5%</td>
+            <td class="td-cash">8.0%</td>
+            <td class="td-meaning">满仓杠杆</td>
+          </tr>
+          <tr class="trend-mild">
+            <td class="td-step">S4</td>
+            <td class="td-score">0.99 - 1.32</td>
+            <td class="td-tqqq">48.0%</td>
+            <td class="td-qqq">40.0%</td>
+            <td class="td-cash">12.0%</td>
+            <td class="td-meaning">高杠杆</td>
+          </tr>
+          <tr class="trend-mild">
+            <td class="td-step">S5</td>
+            <td class="td-score">1.32 - 1.65</td>
+            <td class="td-tqqq">40.1%</td>
+            <td class="td-qqq">43.9%</td>
+            <td class="td-cash">16.0%</td>
+            <td class="td-meaning">高杠杆</td>
+          </tr>
+          <tr class="trend-mild">
+            <td class="td-step">S6</td>
+            <td class="td-score">1.65 - 1.98</td>
+            <td class="td-tqqq">32.7%</td>
+            <td class="td-qqq">47.3%</td>
+            <td class="td-cash">20.0%</td>
+            <td class="td-meaning">高杠杆</td>
+          </tr>
+          <tr class="trend-mild">
+            <td class="td-step">S7</td>
+            <td class="td-score">1.98 - 2.31</td>
+            <td class="td-tqqq">25.9%</td>
+            <td class="td-qqq">50.1%</td>
+            <td class="td-cash">24.0%</td>
+            <td class="td-meaning">偏进攻</td>
+          </tr>
+          <tr class="trend-mild">
+            <td class="td-step">S8</td>
+            <td class="td-score">2.31 - 2.64</td>
+            <td class="td-tqqq">19.6%</td>
+            <td class="td-qqq">52.4%</td>
+            <td class="td-cash">28.0%</td>
+            <td class="td-meaning">偏进攻</td>
+          </tr>
+          <tr class="trend-mild">
+            <td class="td-step">S9</td>
+            <td class="td-score">2.64 - 2.97</td>
+            <td class="td-tqqq">13.9%</td>
+            <td class="td-qqq">54.1%</td>
+            <td class="td-cash">32.0%</td>
+            <td class="td-meaning">偏进攻</td>
+          </tr>
+          <tr class="trend-mid">
+            <td class="td-step">S10</td>
+            <td class="td-score">2.97 - 3.30</td>
+            <td class="td-tqqq">8.7%</td>
+            <td class="td-qqq">55.3%</td>
+            <td class="td-cash">36.0%</td>
+            <td class="td-meaning">半杠杆</td>
+          </tr>
+          <tr class="trend-mid">
+            <td class="td-step">S11</td>
+            <td class="td-score">3.30 - 3.63</td>
+            <td class="td-tqqq">4.1%</td>
+            <td class="td-qqq">55.9%</td>
+            <td class="td-cash">40.0%</td>
+            <td class="td-meaning">半杠杆</td>
+          </tr>
+          <tr class="trend-mid">
+            <td class="td-step">S12</td>
+            <td class="td-score">3.63 - 3.96</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">56.0%</td>
+            <td class="td-cash">44.0%</td>
+            <td class="td-meaning">半杠杆</td>
+          </tr>
+          <tr class="trend-mid">
+            <td class="td-step">S13</td>
+            <td class="td-score">3.96 - 4.29</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">52.0%</td>
+            <td class="td-cash">48.0%</td>
+            <td class="td-meaning">去杠杆</td>
+          </tr>
+          <tr class="trend-mid">
+            <td class="td-step">S14</td>
+            <td class="td-score">4.29 - 4.62</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">48.0%</td>
+            <td class="td-cash">52.0%</td>
+            <td class="td-meaning">去杠杆</td>
+          </tr>
+          <tr class="trend-mid">
+            <td class="td-step">S15</td>
+            <td class="td-score">4.62 - 4.95</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">44.0%</td>
+            <td class="td-cash">56.0%</td>
+            <td class="td-meaning">去杠杆</td>
+          </tr>
+          <tr class="trend-warn">
+            <td class="td-step">S16</td>
+            <td class="td-score">4.95 - 5.28</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">40.0%</td>
+            <td class="td-cash">60.0%</td>
+            <td class="td-meaning">中性</td>
+          </tr>
+          <tr class="trend-warn">
+            <td class="td-step">S17</td>
+            <td class="td-score">5.28 - 5.61</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">36.0%</td>
+            <td class="td-cash">64.0%</td>
+            <td class="td-meaning">中性</td>
+          </tr>
+          <tr class="trend-warn">
+            <td class="td-step">S18</td>
+            <td class="td-score">5.61 - 5.94</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">32.0%</td>
+            <td class="td-cash">68.0%</td>
+            <td class="td-meaning">中性</td>
+          </tr>
+          <tr class="trend-warn">
+            <td class="td-step">S19</td>
+            <td class="td-score">5.94 - 6.27</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">28.0%</td>
+            <td class="td-cash">72.0%</td>
+            <td class="td-meaning">防守</td>
+          </tr>
+          <tr class="trend-warn">
+            <td class="td-step">S20</td>
+            <td class="td-score">6.27 - 6.60</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">24.0%</td>
+            <td class="td-cash">76.0%</td>
+            <td class="td-meaning">防守</td>
+          </tr>
+          <tr class="trend-warn">
+            <td class="td-step">S21</td>
+            <td class="td-score">6.60 - 6.93</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">20.0%</td>
+            <td class="td-cash">80.0%</td>
+            <td class="td-meaning">防守</td>
+          </tr>
+          <tr class="trend-danger">
+            <td class="td-step">S22</td>
+            <td class="td-score">6.93 - 7.26</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">16.0%</td>
+            <td class="td-cash">84.0%</td>
+            <td class="td-meaning">重防守</td>
+          </tr>
+          <tr class="trend-danger">
+            <td class="td-step">S23</td>
+            <td class="td-score">7.26 - 7.59</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">12.0%</td>
+            <td class="td-cash">88.0%</td>
+            <td class="td-meaning">重防守</td>
+          </tr>
+          <tr class="trend-danger">
+            <td class="td-step">S24</td>
+            <td class="td-score">7.59 - 7.92</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">8.0%</td>
+            <td class="td-cash">92.0%</td>
+            <td class="td-meaning">重防守</td>
+          </tr>
+          <tr class="trend-danger">
+            <td class="td-step">S25</td>
+            <td class="td-score">>= 7.92</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">4.0%</td>
+            <td class="td-cash">96.0%</td>
+            <td class="td-meaning">全现金</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="trend-legend">
+      <div class="trend-legend-item"><span class="trend-legend-dot safe"></span> S1-S3 满仓杠杆（对应 L1）</div>
+      <div class="trend-legend-item"><span class="trend-legend-dot mild"></span> S4-S9 高杠杆/偏进攻（对应 L2）</div>
+      <div class="trend-legend-item"><span class="trend-legend-dot mid"></span> S10-S15 半杠杆/去杠杆（对应 L3）</div>
+      <div class="trend-legend-item"><span class="trend-legend-dot warn"></span> S16-S21 中性/防守（对应 L4）</div>
+      <div class="trend-legend-item"><span class="trend-legend-dot danger"></span> S22-S25 重防守/全现金（对应 L5）</div>
+    </div>
   </div>
 </div>
 
