@@ -13,6 +13,7 @@ US Market Dual-Signal Bot
 """
 
 import json
+import math
 import os
 import re
 import sys
@@ -81,17 +82,104 @@ def load_config(config_path: str = CONFIG_PATH) -> dict:
 
 POSITION_LEVELS = {
     0: ("L1-满仓进攻", "所有信号正常，市场处于乐观状态"),
-    1: ("L2-75%仓位", "一个信号触发，开始警惕"),
-    2: ("L3-50%仓位", "两个信号触发，明显风险"),
-    3: ("L4-25%仓位", "三个信号全部触发，极度危险"),
+    1: ("L2-偏进攻", "一个信号触发，减杠杆但不减仓"),
+    2: ("L3-去杠杆", "两个信号触发，明显风险，去杠杆防守"),
+    3: ("L4-避险", "三个信号全部触发，极度危险"),
+}
+
+# 调仓配比（基于纳斯达克100信号级别）
+POSITION_ALLOCATION = {
+    0: {"tqqq": 0.75, "qqq": 0.25, "cash": 0.00, "hint": "满仓进攻"},
+    1: {"tqqq": 0.50, "qqq": 0.35, "cash": 0.10, "hint": "减杠杆偏进攻"},
+    2: {"tqqq": 0.00, "qqq": 0.50, "cash": 0.30, "hint": "去杠杆防守"},
+    3: {"tqqq": 0.00, "qqq": 0.25, "cash": 0.75, "hint": "大幅减仓避险"},
 }
 
 
 def get_position(triggered_count: int) -> tuple:
     """根据触发信号数量返回仓位建议。"""
     if triggered_count > 3:
-        return ("L5-100%现金", "超过3个信号触发，全部撤退")
+        return ("L5-全现金", "超过3个信号触发，全部撤退")
     return POSITION_LEVELS.get(triggered_count, ("L1-满仓进攻", "所有信号正常"))
+
+
+def get_allocation(triggered_count: int, cfg: dict = None) -> dict:
+    """根据触发信号数量返回调仓配比。优先从config读取，否则用默认值。"""
+    if cfg and "position_allocation" in cfg:
+        alloc_cfg = cfg["position_allocation"]
+        # 从config中查找对应级别
+        level_key = f"L{min(triggered_count + 1, 5)}"
+        if level_key in alloc_cfg:
+            return alloc_cfg[level_key]
+    
+    if triggered_count > 3:
+        return {"tqqq": 0.00, "qqq": 0.00, "cash": 1.00, "hint": "全部撤退"}
+    return POSITION_ALLOCATION.get(triggered_count, POSITION_ALLOCATION[0])
+
+
+# ---------------------------------------------------------------------------
+# 趋势评分（25级连续风险评分）
+# ---------------------------------------------------------------------------
+
+def compute_trend_score(dd: float, vix: float, pe: float, cfg: dict) -> dict:
+    """
+    计算25级连续风险评分，用于趋势预警。
+    
+    评分公式：score = s_dd + s_vix + s_pe
+    - s_dd = max(0, (-dd - |dd_baseline|) / 10) × scale  （DD越低风险越高）
+    - s_vix = max(0, (vix - vix_baseline) / 7) × scale    （VIX越高风险越高）
+    - s_pe = max(0, (pe - pe_baseline) / 5) × scale       （PE越高风险越高）
+    
+    评分→Step: step = ceil(score / 0.33) + 1, 最大25
+    
+    Returns: {"score": float, "step": int, "s_dd": float, "s_vix": float, "s_pe": float,
+              "trend_direction": str, "trend_hint": str}
+    """
+    ts_cfg = cfg.get("trend_scoring", {})
+    
+    dd_baseline = ts_cfg.get("dd_baseline", -3.0)
+    vix_baseline = ts_cfg.get("vix_baseline", 16.0)
+    pe_baseline = ts_cfg.get("pe_baseline", 32.0)
+    scale = ts_cfg.get("scale", 1.0)
+    
+    # 各指标评分
+    s_dd = max(0, (-dd - abs(dd_baseline)) / 10) * scale if dd < dd_baseline else 0
+    s_vix = max(0, (vix - vix_baseline) / 7) * scale if vix > vix_baseline else 0
+    s_pe = max(0, (pe - pe_baseline) / 5) * scale if pe > pe_baseline else 0
+    
+    score = s_dd + s_vix + s_pe
+    # score → step: S1=score 0~0.33, S2=0.34~0.66, ..., S25=score≥8
+    step = min(25, max(1, int(score / 0.33) + 1))
+    
+    # 趋势方向判断
+    if score < 0.5:
+        trend_dir = "→"
+        trend_hint = "风险极低，远离切换阈值"
+    elif score < 1.0:
+        trend_dir = "→"
+        trend_hint = "风险偏低，安全区间"
+    elif score < 2.0:
+        trend_dir = "↑"
+        trend_hint = "风险上升，注意可能升级"
+    elif score < 4.0:
+        trend_dir = "↑↑"
+        trend_hint = "风险偏高，近期可能切换级别"
+    elif score < 6.0:
+        trend_dir = "⚠️"
+        trend_hint = "风险高，应已触发信号"
+    else:
+        trend_dir = "🔴"
+        trend_hint = "风险极高，严重危机"
+    
+    return {
+        "score": round(score, 2),
+        "step": step,
+        "s_dd": round(s_dd, 2),
+        "s_vix": round(s_vix, 2),
+        "s_pe": round(s_pe, 2),
+        "trend_dir": trend_dir,
+        "trend_hint": trend_hint,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -252,8 +340,8 @@ def check_sp500_signals(cfg: dict) -> dict:
     lookback = cfg.get("lookback_days", 252)
 
     dd_threshold = thresholds.get("drawdown", -10.0)
-    vix_threshold = thresholds.get("vix", 30.0)
-    cape_threshold = thresholds.get("cape", 30.0)
+    vix_threshold = thresholds.get("vix", 22.0)
+    cape_threshold = thresholds.get("cape", 35.0)
 
     spy_data = get_etf_data("SPY", "SPY", lookback)
     vix_value = get_volatility_index("^VIX", "VIX")
@@ -321,7 +409,7 @@ def check_nasdaq100_signals(cfg: dict) -> dict:
     lookback = cfg.get("lookback_days", 252)
 
     dd_threshold = thresholds.get("drawdown", -10.0)
-    vxn_threshold = thresholds.get("vxn", 30.0)
+    vxn_threshold = thresholds.get("vxn", 22.0)
     qqq_pe_threshold = thresholds.get("qqq_pe", 35.0)
 
     qqq_data = get_etf_data("QQQ", "QQQ", lookback)
@@ -411,7 +499,7 @@ def format_dd(dd_value: float) -> str:
 def build_daily_report(result: dict, cfg: dict) -> str:
     """
     构建精简版每日报告。
-    SPY和QQQ各一行指标，一屏看完所有关键信息。
+    SPY和QQQ各一行指标，加上调仓建议和趋势评分。
     """
     now_bjt = datetime.now(BJT).strftime("%Y-%m-%d")
     dashboard_url = cfg.get("dashboard_url", "")
@@ -423,6 +511,16 @@ def build_daily_report(result: dict, cfg: dict) -> str:
 
     sp_pos = sp["position"]
     nd_pos = nd["position"]
+    nd_triggered = nd["triggered_count"]
+
+    # 获取调仓配比
+    alloc = get_allocation(nd_triggered, cfg)
+    
+    # 计算趋势评分（基于QQQ的DD/VIX/PE）
+    dd_val = qqq["drawdown"]
+    vix_val = nd["vix"]
+    pe_val = nd["qqq_pe"]
+    trend = compute_trend_score(dd_val, vix_val, pe_val, cfg)
 
     lines = [
         f"**📊 美股信号日报 | {now_bjt}**",
@@ -454,7 +552,31 @@ def build_daily_report(result: dict, cfg: dict) -> str:
         nd_strs.append(f"{s['name']} {val_str} {s['icon']}{threshold_hint}")
 
     lines.append(f"> {' | '.join(nd_strs)}")
-    lines.append(f"> {nd['triggered_count']}/3 触发 → {nd_pos[0]}，{nd_pos[1]}")
+    lines.append(f"> {nd_triggered}/3 触发 → {nd_pos[0]}")
+
+    # 调仓建议行
+    tqqq_pct = int(alloc["tqqq"] * 100)
+    qqq_pct = int(alloc["qqq"] * 100)
+    cash_pct = int(alloc["cash"] * 100)
+    
+    alloc_str = f"TQQQ {tqqq_pct}%"
+    if tqqq_pct == 0:
+        alloc_str = f"QQQ {qqq_pct}%"
+    elif qqq_pct > 0:
+        alloc_str = f"TQQQ {tqqq_pct}% | QQQ {qqq_pct}%"
+    
+    if cash_pct > 0:
+        alloc_str += f" | 现金 {cash_pct}%"
+    
+    lines.append(f"> 💰 调仓建议：**{alloc_str}** ← {alloc['hint']}")
+
+    # 趋势评分行
+    trend_score = trend["score"]
+    trend_step = trend["step"]
+    trend_dir = trend["trend_dir"]
+    trend_hint = trend["trend_hint"]
+    
+    lines.append(f"> 📊 趋势评分：{trend_score} (S{trend_step}) {trend_dir} {trend_hint}")
 
     if dashboard_url:
         lines.append("")
@@ -465,7 +587,7 @@ def build_daily_report(result: dict, cfg: dict) -> str:
 
 def build_alert_report(result: dict, cfg: dict) -> str:
     """
-    构建告警版推送。信号触发时使用，更醒目。
+    构建告警版推送。信号触发时使用，更醒目，含调仓建议和趋势评分。
     """
     now_bjt = datetime.now(BJT).strftime("%Y-%m-%d")
     dashboard_url = cfg.get("dashboard_url", "")
@@ -477,6 +599,16 @@ def build_alert_report(result: dict, cfg: dict) -> str:
 
     sp_pos = sp["position"]
     nd_pos = nd["position"]
+    nd_triggered = nd["triggered_count"]
+
+    # 获取调仓配比
+    alloc = get_allocation(nd_triggered, cfg)
+    
+    # 计算趋势评分
+    dd_val = qqq["drawdown"]
+    vix_val = nd["vix"]
+    pe_val = nd["qqq_pe"]
+    trend = compute_trend_score(dd_val, vix_val, pe_val, cfg)
 
     # 根据严重程度选择标题
     total = result["total_triggered"]
@@ -522,6 +654,25 @@ def build_alert_report(result: dict, cfg: dict) -> str:
 
     lines.append(f"> {' | '.join(nd_strs)}")
     lines.append(f"> {nd_pos[0]}：{nd_pos[1]}")
+
+    # 调仓建议行
+    tqqq_pct = int(alloc["tqqq"] * 100)
+    qqq_pct = int(alloc["qqq"] * 100)
+    cash_pct = int(alloc["cash"] * 100)
+    
+    alloc_str = f"TQQQ {tqqq_pct}%"
+    if tqqq_pct == 0:
+        alloc_str = f"QQQ {qqq_pct}%"
+    elif qqq_pct > 0:
+        alloc_str = f"TQQQ {tqqq_pct}% | QQQ {qqq_pct}%"
+    
+    if cash_pct > 0:
+        alloc_str += f" | 现金 {cash_pct}%"
+    
+    lines.append(f"> 💰 调仓建议：**{alloc_str}** ← {alloc['hint']}")
+
+    # 趋势评分行
+    lines.append(f"> 📊 趋势评分：{trend['score']} (S{trend['step']}) {trend['trend_dir']} {trend['trend_hint']}")
 
     if dashboard_url:
         lines.append("")
