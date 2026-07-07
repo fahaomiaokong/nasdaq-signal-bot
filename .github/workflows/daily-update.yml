@@ -53,7 +53,7 @@ jobs:
           git config user.email "bot@nasdaq-signal.local"
 
           # 只 commit 数据文件变更
-          git add dashboard_data.json dashboard.html || true
+          git add dashboard_data.json dashboard.html index.html || true
 
           # 检查是否有变更
           if git diff --staged --quiet; then
@@ -61,6 +61,7 @@ jobs:
           else
             DATE=$(date -u +%Y-%m-%d)
             git commit -m "auto: update dashboard data ${DATE}"
+            git pull --rebase origin main || true
             git push
           fi
 

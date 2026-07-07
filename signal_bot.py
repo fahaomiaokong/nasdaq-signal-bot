@@ -157,7 +157,27 @@ def get_volatility_index(ticker: str, name: str) -> float:
 
 
 def get_cape() -> float:
-    """获取 Shiller CAPE。失败返回 -1。"""
+    """获取 Shiller CAPE。
+    
+    优先从 dashboard_data.json 读取（generate_dashboard.py 已从 Shiller xls 获取），
+    如果不可用则尝试 multpl.com，失败返回 -1。
+    """
+    # 优先读取本地 dashboard_data.json（数据更准确且无需网络请求）
+    try:
+        dashboard_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "dashboard_data.json"
+        )
+        if os.path.exists(dashboard_path):
+            with open(dashboard_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            cape_val = data.get("today", {}).get("cape", None)
+            if cape_val and isinstance(cape_val, (int, float)) and cape_val > 0:
+                print(f"[CAPE] 从 dashboard_data.json 获取: {cape_val}")
+                return round(float(cape_val), 2)
+    except Exception as e:
+        print(f"[CAPE] 读取 dashboard_data.json 失败: {e}")
+
+    # 备用：从 multpl.com 抓取
     try:
         url = "https://www.multpl.com/shiller-pe/table"
         headers = {
@@ -182,13 +202,32 @@ def get_cape() -> float:
             return round(float(matches2[0]), 2)
 
     except Exception as e:
-        print(f"[CAPE] 获取失败: {e}")
+        print(f"[CAPE] multpl.com 获取失败: {e}")
 
     return -1.0
 
 
 def get_qqq_pe() -> float:
-    """获取 QQQ PE 比率。失败返回 -1。"""
+    """获取 QQQ PE 比率。
+    
+    优先从 dashboard_data.json 读取，如果不可用则尝试 yfinance，失败返回 -1。
+    """
+    # 优先读取本地 dashboard_data.json
+    try:
+        dashboard_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "dashboard_data.json"
+        )
+        if os.path.exists(dashboard_path):
+            with open(dashboard_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            pe_val = data.get("today", {}).get("qqq_pe", None)
+            if pe_val and isinstance(pe_val, (int, float)) and pe_val > 0:
+                print(f"[QQQ PE] 从 dashboard_data.json 获取: {pe_val}")
+                return round(float(pe_val), 2)
+    except Exception as e:
+        print(f"[QQQ PE] 读取 dashboard_data.json 失败: {e}")
+
+    # 备用：从 yfinance 获取
     import yfinance as yf
 
     try:
@@ -198,7 +237,7 @@ def get_qqq_pe() -> float:
         if pe is not None:
             return round(float(pe), 2)
     except Exception as e:
-        print(f"[QQQ PE] 获取失败: {e}")
+        print(f"[QQQ PE] yfinance 获取失败: {e}")
 
     return -1.0
 

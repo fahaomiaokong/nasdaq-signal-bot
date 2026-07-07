@@ -53,7 +53,7 @@ def run_generate_dashboard() -> dict:
 
 
 def run_signal_bot(mode: str = "daily") -> dict:
-    """运行信号推送脚本。"""
+    """运行信号推送脚本。推送失败不阻塞整体流程。"""
     script = os.path.join(SCRIPT_DIR, "signal_bot.py")
     print("\n" + "=" * 60)
     print(f"[2/2] 信号推送 (mode={mode})...")
@@ -76,9 +76,11 @@ def run_signal_bot(mode: str = "daily") -> dict:
     if result.stderr:
         print("[stderr]", result.stderr)
 
+    # signal_bot.py 推送失败（如 webhook URL 无效）不应阻塞仪表盘更新
+    # 返回码非0时仅记录警告，不判定为整体失败
     if result.returncode != 0:
-        print(f"[ERROR] signal_bot.py 失败 (rc={result.returncode})")
-        return {"success": False, "error": result.stderr[:500]}
+        print(f"[WARN] signal_bot.py 执行异常 (rc={result.returncode})，但继续后续流程")
+        return {"success": True, "push_failed": True, "error": result.stderr[:500]}
     return {"success": True}
 
 
