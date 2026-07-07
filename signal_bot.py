@@ -284,6 +284,103 @@ def get_spy_allocation(step: int, cfg: dict = None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# 仓位格式化 + 上次仓位对比
+# ---------------------------------------------------------------------------
+
+def format_spy_allocation_str(alloc: dict) -> str:
+    """格式化SPY仓位字符串：40.1%SPXL + 43.9%SPY + 16.0%现金（省略0%项）"""
+    parts = []
+    spxl = round(alloc["spxl"] * 100, 1)
+    spy = round(alloc["spy"] * 100, 1)
+    cash = round(alloc["cash"] * 100, 1)
+    if spxl > 0:
+        parts.append(f"{spxl:g}%SPXL")
+    if spy > 0:
+        parts.append(f"{spy:g}%SPY")
+    if cash > 0:
+        parts.append(f"{cash:g}%现金")
+    return " + ".join(parts) if parts else "100%现金"
+
+
+def format_qqq_allocation_str(alloc: dict) -> str:
+    """格式化QQQ仓位字符串：75%TQQQ + 25%QQQ（省略0%项）"""
+    parts = []
+    tqqq = round(alloc["tqqq"] * 100, 1)
+    qqq = round(alloc["qqq"] * 100, 1)
+    cash = round(alloc["cash"] * 100, 1)
+    if tqqq > 0:
+        parts.append(f"{tqqq:g}%TQQQ")
+    if qqq > 0:
+        parts.append(f"{qqq:g}%QQQ")
+    if cash > 0:
+        parts.append(f"{cash:g}%现金")
+    return " + ".join(parts) if parts else "100%现金"
+
+
+def get_previous_allocation(cfg: dict) -> dict:
+    """读取 dashboard_data.json 中昨天的数据，计算上次的SPY/QQQ仓位配比。
+    
+    daily_task.py 先跑 generate_dashboard.py（更新JSON），再跑 signal_bot.py。
+    JSON数组最后一条=今天，倒数第二条=昨天。
+    
+    Returns: {"spy_alloc": dict|None, "qqq_alloc": dict|None}
+    """
+    result = {"spy_alloc": None, "qqq_alloc": None}
+    
+    try:
+        dashboard_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "dashboard_data.json"
+        )
+        if not os.path.exists(dashboard_path):
+            return result
+        
+        with open(dashboard_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        # 获取倒数第二条数据（昨天）
+        spy_dd_raw = data.get("spy", {}).get("dd_raw", [])
+        vix_raw = data.get("vix", {}).get("raw", [])
+        cape_raw = data.get("cape", {}).get("raw", [])
+        qqq_dd_raw = data.get("qqq", {}).get("dd_raw", [])
+        qqq_pe_raw = data.get("qqq_pe", {}).get("raw", [])
+        
+        if len(spy_dd_raw) < 2:
+            return result
+        
+        # 昨天的指标值
+        prev_spy_dd = spy_dd_raw[-2]
+        prev_vix = vix_raw[-2] if len(vix_raw) >= 2 else vix_raw[-1]
+        prev_cape = cape_raw[-2] if len(cape_raw) >= 2 else cape_raw[-1]
+        prev_qqq_dd = qqq_dd_raw[-2] if len(qqq_dd_raw) >= 2 else qqq_dd_raw[-1]
+        prev_qqq_pe = qqq_pe_raw[-2] if len(qqq_pe_raw) >= 2 else qqq_pe_raw[-1]
+        
+        # 计算昨天SPY仓位（25级）
+        spy_trend = compute_spy_trend_score(prev_spy_dd, prev_vix, prev_cape, cfg)
+        result["spy_alloc"] = get_spy_allocation(spy_trend["step"], cfg)
+        
+        # 计算昨天QQQ仓位（5级）
+        nd_thresholds = cfg.get("nasdaq100_thresholds", {})
+        dd_thr = nd_thresholds.get("drawdown", -10.0)
+        vix_thr = nd_thresholds.get("vix", 22.0)
+        pe_thr = nd_thresholds.get("qqq_pe", 35.0)
+        
+        prev_triggered = 0
+        if prev_qqq_dd <= dd_thr:
+            prev_triggered += 1
+        if prev_vix >= vix_thr:
+            prev_triggered += 1
+        if prev_qqq_pe > 0 and prev_qqq_pe >= pe_thr:
+            prev_triggered += 1
+        
+        result["qqq_alloc"] = get_allocation(prev_triggered, cfg)
+        
+    except Exception as e:
+        print(f"[上次仓位] 读取失败: {e}")
+    
+    return result
+
+
+# ---------------------------------------------------------------------------
 # 信号状态符号
 # ---------------------------------------------------------------------------
 
@@ -652,19 +749,17 @@ def build_daily_report(result: dict, cfg: dict) -> str:
     # SPY 25级趋势评分 + 调仓
     lines.append(f"> 📊 趋势评分：{spy_trend['score']} (S{spy_trend['step']}) {spy_trend['trend_dir']} {spy_trend['trend_hint']}")
     
-    spxl_pct = int(spy_alloc["spxl"] * 100)
-    spy_alloc_pct = int(spy_alloc["spy"] * 100)
-    spy_cash_pct = int(spy_alloc["cash"] * 100)
-    
-    spy_alloc_str = f"SPXL {spxl_pct}%"
-    if spxl_pct == 0:
-        spy_alloc_str = f"SPY {spy_alloc_pct}%"
-    elif spy_alloc_pct > 0:
-        spy_alloc_str = f"SPXL {spxl_pct}% | SPY {spy_alloc_pct}%"
-    if spy_cash_pct > 0:
-        spy_alloc_str += f" | 现金 {spy_cash_pct}%"
-    
-    lines.append(f"> 💰 调仓建议：**{spy_alloc_str}** ← {spy_alloc['hint']}")
+    # 获取上次仓位并对比
+    prev_alloc = get_previous_allocation(cfg)
+    spy_curr_str = format_spy_allocation_str(spy_alloc)
+    if prev_alloc["spy_alloc"]:
+        spy_prev_str = format_spy_allocation_str(prev_alloc["spy_alloc"])
+        if spy_prev_str != spy_curr_str:
+            lines.append(f"> 💰 仓位：**{spy_prev_str} ➡️ {spy_curr_str}**")
+        else:
+            lines.append(f"> 💰 仓位：**{spy_curr_str}**")
+    else:
+        lines.append(f"> 💰 仓位：**{spy_curr_str}**")
     lines.append("")
 
     # QQQ 指标行
@@ -679,21 +774,16 @@ def build_daily_report(result: dict, cfg: dict) -> str:
     lines.append(f"> {' | '.join(nd_strs)}")
     lines.append(f"> {nd_triggered}/3 触发 → {nd_pos[0]}")
 
-    # 调仓建议行
-    tqqq_pct = int(alloc["tqqq"] * 100)
-    qqq_pct = int(alloc["qqq"] * 100)
-    cash_pct = int(alloc["cash"] * 100)
-    
-    alloc_str = f"TQQQ {tqqq_pct}%"
-    if tqqq_pct == 0:
-        alloc_str = f"QQQ {qqq_pct}%"
-    elif qqq_pct > 0:
-        alloc_str = f"TQQQ {tqqq_pct}% | QQQ {qqq_pct}%"
-    
-    if cash_pct > 0:
-        alloc_str += f" | 现金 {cash_pct}%"
-    
-    lines.append(f"> 💰 调仓建议：**{alloc_str}** ← {alloc['hint']}")
+    # 调仓建议行（5级 + 上次对比）
+    qqq_curr_str = format_qqq_allocation_str(alloc)
+    if prev_alloc["qqq_alloc"]:
+        qqq_prev_str = format_qqq_allocation_str(prev_alloc["qqq_alloc"])
+        if qqq_prev_str != qqq_curr_str:
+            lines.append(f"> 💰 仓位：**{qqq_prev_str} ➡️ {qqq_curr_str}**")
+        else:
+            lines.append(f"> 💰 仓位：**{qqq_curr_str}**")
+    else:
+        lines.append(f"> 💰 仓位：**{qqq_curr_str}**")
 
     # 趋势评分行
     trend_score = trend["score"]
@@ -775,19 +865,17 @@ def build_alert_report(result: dict, cfg: dict) -> str:
     # SPY 25级趋势评分 + 调仓
     lines.append(f"> 📊 趋势评分：{spy_trend['score']} (S{spy_trend['step']}) {spy_trend['trend_dir']} {spy_trend['trend_hint']}")
     
-    spxl_pct = int(spy_alloc["spxl"] * 100)
-    spy_alloc_pct = int(spy_alloc["spy"] * 100)
-    spy_cash_pct = int(spy_alloc["cash"] * 100)
-    
-    spy_alloc_str = f"SPXL {spxl_pct}%"
-    if spxl_pct == 0:
-        spy_alloc_str = f"SPY {spy_alloc_pct}%"
-    elif spy_alloc_pct > 0:
-        spy_alloc_str = f"SPXL {spxl_pct}% | SPY {spy_alloc_pct}%"
-    if spy_cash_pct > 0:
-        spy_alloc_str += f" | 现金 {spy_cash_pct}%"
-    
-    lines.append(f"> 💰 调仓建议：**{spy_alloc_str}** ← {spy_alloc['hint']}")
+    # 获取上次仓位并对比
+    prev_alloc = get_previous_allocation(cfg)
+    spy_curr_str = format_spy_allocation_str(spy_alloc)
+    if prev_alloc["spy_alloc"]:
+        spy_prev_str = format_spy_allocation_str(prev_alloc["spy_alloc"])
+        if spy_prev_str != spy_curr_str:
+            lines.append(f"> 💰 仓位：**{spy_prev_str} ➡️ {spy_curr_str}**")
+        else:
+            lines.append(f"> 💰 仓位：**{spy_curr_str}**")
+    else:
+        lines.append(f"> 💰 仓位：**{spy_curr_str}**")
     lines.append("")
 
     # QQQ 部分
@@ -804,21 +892,16 @@ def build_alert_report(result: dict, cfg: dict) -> str:
     lines.append(f"> {' | '.join(nd_strs)}")
     lines.append(f"> {nd_pos[0]}：{nd_pos[1]}")
 
-    # 调仓建议行
-    tqqq_pct = int(alloc["tqqq"] * 100)
-    qqq_pct = int(alloc["qqq"] * 100)
-    cash_pct = int(alloc["cash"] * 100)
-    
-    alloc_str = f"TQQQ {tqqq_pct}%"
-    if tqqq_pct == 0:
-        alloc_str = f"QQQ {qqq_pct}%"
-    elif qqq_pct > 0:
-        alloc_str = f"TQQQ {tqqq_pct}% | QQQ {qqq_pct}%"
-    
-    if cash_pct > 0:
-        alloc_str += f" | 现金 {cash_pct}%"
-    
-    lines.append(f"> 💰 调仓建议：**{alloc_str}** ← {alloc['hint']}")
+    # 调仓建议行（5级 + 上次对比）
+    qqq_curr_str = format_qqq_allocation_str(alloc)
+    if prev_alloc["qqq_alloc"]:
+        qqq_prev_str = format_qqq_allocation_str(prev_alloc["qqq_alloc"])
+        if qqq_prev_str != qqq_curr_str:
+            lines.append(f"> 💰 仓位：**{qqq_prev_str} ➡️ {qqq_curr_str}**")
+        else:
+            lines.append(f"> 💰 仓位：**{qqq_curr_str}**")
+    else:
+        lines.append(f"> 💰 仓位：**{qqq_curr_str}**")
 
     # 趋势评分行
     lines.append(f"> 📊 趋势评分：{trend['score']} (S{trend['step']}) {trend['trend_dir']} {trend['trend_hint']}")
