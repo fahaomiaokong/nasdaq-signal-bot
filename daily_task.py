@@ -65,6 +65,7 @@ def run_signal_bot(mode: str = "daily") -> dict:
     # daily 模式不需要额外参数，signal_bot.py 默认就是 daily
 
     result = subprocess.run(
+        args,
         capture_output=True,
         text=True,
         timeout=120,
