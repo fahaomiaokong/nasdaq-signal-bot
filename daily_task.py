@@ -114,7 +114,14 @@ def main():
         with open(os.path.join(SCRIPT_DIR, "dashboard.html"), "w", encoding="utf-8") as f:
             f.write(html)
 
-        print("[OK] dashboard.html 已更新")
+        # 同时复制为 index.html，用于 GitHub Pages 默认入口
+        import shutil
+        shutil.copy2(
+            os.path.join(SCRIPT_DIR, "dashboard.html"),
+            os.path.join(SCRIPT_DIR, "index.html"),
+        )
+
+        print("[OK] dashboard.html + index.html 已更新")
     except Exception as e:
         print(f"[ERROR] HTML 嵌入失败: {e}")
 
