@@ -59,10 +59,12 @@ def run_signal_bot(mode: str = "daily") -> dict:
     print(f"[2/2] 信号推送 (mode={mode})...")
     print("=" * 60)
 
+    args = [sys.executable, script]
+    if mode == "no_trade":
+        args.append("--no-trade")
+    # daily 模式不需要额外参数，signal_bot.py 默认就是 daily
+
     result = subprocess.run(
-        [sys.executable, script, "--always"] if mode == "daily"
-        else [sys.executable, script, "--no-trade"] if mode == "no_trade"
-        else [sys.executable, script],
         capture_output=True,
         text=True,
         timeout=120,
