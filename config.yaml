@@ -76,3 +76,50 @@ trend_scoring:
   # 评分缩放系数：越大评分越敏感
   # 1.0=温和，2.0=适中，3.0=敏感
   scale: 1.0
+
+# ------------------------------------------------------------------
+# SPY/SPXL 25级趋势评分（直接用25级做调仓决策）
+# ------------------------------------------------------------------
+# 回测最优基线：drawdown -14.9%, 年化 45.8%
+spy_trend_scoring:
+  # DD基线：DD >= 此值视为零风险贡献（百分比）
+  dd_baseline: -2.0
+
+  # VIX基线：VIX <= 此值视为零风险贡献
+  vix_baseline: 16.0
+
+  # CAPE基线：CAPE <= 此值视为零风险贡献
+  # CAPE=41 高于长期均值，CAPE在大部分时间不贡献风险分
+  cape_baseline: 41.0
+
+  # 评分缩放系数：5.0=高度敏感，细粒度区分风险
+  scale: 5.0
+
+# SPY/SPXL 25级仓位配比表
+# 每级总仓位递减4%，S1=满仓杠杆 S25=全现金
+spy_position_25level:
+  S1: {spxl: 0.750, spy: 0.250, cash: 0.000, hint: "满仓杠杆"}
+  S2: {spxl: 0.655, spy: 0.305, cash: 0.040, hint: "满仓杠杆"}
+  S3: {spxl: 0.565, spy: 0.355, cash: 0.080, hint: "满仓杠杆"}
+  S4: {spxl: 0.480, spy: 0.400, cash: 0.120, hint: "高杠杆"}
+  S5: {spxl: 0.401, spy: 0.439, cash: 0.160, hint: "高杠杆"}
+  S6: {spxl: 0.327, spy: 0.473, cash: 0.200, hint: "高杠杆"}
+  S7: {spxl: 0.259, spy: 0.501, cash: 0.240, hint: "偏进攻"}
+  S8: {spxl: 0.196, spy: 0.524, cash: 0.280, hint: "偏进攻"}
+  S9: {spxl: 0.139, spy: 0.541, cash: 0.320, hint: "偏进攻"}
+  S10: {spxl: 0.087, spy: 0.553, cash: 0.360, hint: "半杠杆"}
+  S11: {spxl: 0.041, spy: 0.559, cash: 0.400, hint: "半杠杆"}
+  S12: {spxl: 0.000, spy: 0.560, cash: 0.440, hint: "半杠杆"}
+  S13: {spxl: 0.000, spy: 0.520, cash: 0.480, hint: "去杠杆"}
+  S14: {spxl: 0.000, spy: 0.480, cash: 0.520, hint: "去杠杆"}
+  S15: {spxl: 0.000, spy: 0.440, cash: 0.560, hint: "去杠杆"}
+  S16: {spxl: 0.000, spy: 0.400, cash: 0.600, hint: "中性"}
+  S17: {spxl: 0.000, spy: 0.360, cash: 0.640, hint: "中性"}
+  S18: {spxl: 0.000, spy: 0.320, cash: 0.680, hint: "中性"}
+  S19: {spxl: 0.000, spy: 0.280, cash: 0.720, hint: "防守"}
+  S20: {spxl: 0.000, spy: 0.240, cash: 0.760, hint: "防守"}
+  S21: {spxl: 0.000, spy: 0.200, cash: 0.800, hint: "防守"}
+  S22: {spxl: 0.000, spy: 0.160, cash: 0.840, hint: "重防守"}
+  S23: {spxl: 0.000, spy: 0.120, cash: 0.880, hint: "重防守"}
+  S24: {spxl: 0.000, spy: 0.080, cash: 0.920, hint: "重防守"}
+  S25: {spxl: 0.000, spy: 0.040, cash: 0.960, hint: "全现金"}

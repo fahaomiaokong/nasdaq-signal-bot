@@ -121,6 +121,35 @@ def get_allocation(triggered_count: int, cfg: dict = None) -> dict:
 # 趋势评分（25级连续风险评分）
 # ---------------------------------------------------------------------------
 
+# SPY/SPXL 25级仓位配比表（回测最优基线：DD=-2, VIX=16, CAPE=41, scale=5）
+SPY_ALLOCATION_25 = {
+    1:  {"spxl": 0.750, "spy": 0.250, "cash": 0.000, "hint": "满仓杠杆"},
+    2:  {"spxl": 0.655, "spy": 0.305, "cash": 0.040, "hint": "满仓杠杆"},
+    3:  {"spxl": 0.565, "spy": 0.355, "cash": 0.080, "hint": "满仓杠杆"},
+    4:  {"spxl": 0.480, "spy": 0.400, "cash": 0.120, "hint": "高杠杆"},
+    5:  {"spxl": 0.401, "spy": 0.439, "cash": 0.160, "hint": "高杠杆"},
+    6:  {"spxl": 0.327, "spy": 0.473, "cash": 0.200, "hint": "高杠杆"},
+    7:  {"spxl": 0.259, "spy": 0.501, "cash": 0.240, "hint": "偏进攻"},
+    8:  {"spxl": 0.196, "spy": 0.524, "cash": 0.280, "hint": "偏进攻"},
+    9:  {"spxl": 0.139, "spy": 0.541, "cash": 0.320, "hint": "偏进攻"},
+    10: {"spxl": 0.087, "spy": 0.553, "cash": 0.360, "hint": "半杠杆"},
+    11: {"spxl": 0.041, "spy": 0.559, "cash": 0.400, "hint": "半杠杆"},
+    12: {"spxl": 0.000, "spy": 0.560, "cash": 0.440, "hint": "半杠杆"},
+    13: {"spxl": 0.000, "spy": 0.520, "cash": 0.480, "hint": "去杠杆"},
+    14: {"spxl": 0.000, "spy": 0.480, "cash": 0.520, "hint": "去杠杆"},
+    15: {"spxl": 0.000, "spy": 0.440, "cash": 0.560, "hint": "去杠杆"},
+    16: {"spxl": 0.000, "spy": 0.400, "cash": 0.600, "hint": "中性"},
+    17: {"spxl": 0.000, "spy": 0.360, "cash": 0.640, "hint": "中性"},
+    18: {"spxl": 0.000, "spy": 0.320, "cash": 0.680, "hint": "中性"},
+    19: {"spxl": 0.000, "spy": 0.280, "cash": 0.720, "hint": "防守"},
+    20: {"spxl": 0.000, "spy": 0.240, "cash": 0.760, "hint": "防守"},
+    21: {"spxl": 0.000, "spy": 0.200, "cash": 0.800, "hint": "防守"},
+    22: {"spxl": 0.000, "spy": 0.160, "cash": 0.840, "hint": "重防守"},
+    23: {"spxl": 0.000, "spy": 0.120, "cash": 0.880, "hint": "重防守"},
+    24: {"spxl": 0.000, "spy": 0.080, "cash": 0.920, "hint": "重防守"},
+    25: {"spxl": 0.000, "spy": 0.040, "cash": 0.960, "hint": "全现金"},
+}
+
 def compute_trend_score(dd: float, vix: float, pe: float, cfg: dict) -> dict:
     """
     计算25级连续风险评分，用于趋势预警。
@@ -180,6 +209,78 @@ def compute_trend_score(dd: float, vix: float, pe: float, cfg: dict) -> dict:
         "trend_dir": trend_dir,
         "trend_hint": trend_hint,
     }
+
+
+def compute_spy_trend_score(dd: float, vix: float, cape: float, cfg: dict) -> dict:
+    """
+    计算SPY 25级连续风险评分，直接用于SPXL/SPY调仓决策。
+
+    回测最优基线：DD=-2, VIX=16, CAPE=41, scale=5
+    回撤 -14.9%, 年化 45.8%
+    
+    评分公式：score = s_dd + s_vix + s_cape
+    - s_dd = max(0, (-dd - |dd_baseline|) / 10) × scale  （DD越低风险越高）
+    - s_vix = max(0, (vix - vix_baseline) / 7) × scale    （VIX越高风险越高）
+    - s_cape = max(0, (cape - cape_baseline) / 5) × scale  （CAPE越高风险越高）
+    
+    评分→Step: step = int(score / 0.33) + 1, 最大25
+    """
+    ts_cfg = cfg.get("spy_trend_scoring", {})
+
+    dd_baseline = ts_cfg.get("dd_baseline", -2.0)
+    vix_baseline = ts_cfg.get("vix_baseline", 16.0)
+    cape_baseline = ts_cfg.get("cape_baseline", 41.0)
+    scale = ts_cfg.get("scale", 5.0)
+
+    # 各指标评分
+    s_dd = max(0, (-dd - abs(dd_baseline)) / 10) * scale if dd < dd_baseline else 0
+    s_vix = max(0, (vix - vix_baseline) / 7) * scale if vix > vix_baseline else 0
+    denominator = max(cape_baseline, 0.01)
+    s_cape = max(0, (cape - cape_baseline) / 5) * scale if cape > cape_baseline else 0
+
+    score = s_dd + s_vix + s_cape
+    step = min(25, max(1, int(score / 0.33) + 1))
+
+    # 趋势方向判断
+    if score < 0.5:
+        trend_dir = "→"
+        trend_hint = "风险极低，满仓杠杆"
+    elif score < 1.0:
+        trend_dir = "→"
+        trend_hint = "风险偏低，安全区间"
+    elif score < 2.0:
+        trend_dir = "↑"
+        trend_hint = "风险上升，注意可能升级"
+    elif score < 4.0:
+        trend_dir = "↑↑"
+        trend_hint = "风险偏高，减杠杆"
+    elif score < 6.0:
+        trend_dir = "⚠️"
+        trend_hint = "风险高，去杠杆防守"
+    else:
+        trend_dir = "🔴"
+        trend_hint = "风险极高，大幅避险"
+
+    return {
+        "score": round(score, 2),
+        "step": step,
+        "s_dd": round(s_dd, 2),
+        "s_vix": round(s_vix, 2),
+        "s_cape": round(s_cape, 2),
+        "trend_dir": trend_dir,
+        "trend_hint": trend_hint,
+    }
+
+
+def get_spy_allocation(step: int, cfg: dict = None) -> dict:
+    """根据SPY 25级评分步骤返回SPXL/SPY/cash调仓配比。优先从config读取。"""
+    if cfg and "spy_position_25level" in cfg:
+        alloc_cfg = cfg["spy_position_25level"]
+        key = f"S{min(step, 25)}"
+        if key in alloc_cfg:
+            return alloc_cfg[key]
+
+    return SPY_ALLOCATION_25.get(min(step, 25), SPY_ALLOCATION_25[1])
 
 
 # ---------------------------------------------------------------------------
@@ -513,14 +614,21 @@ def build_daily_report(result: dict, cfg: dict) -> str:
     nd_pos = nd["position"]
     nd_triggered = nd["triggered_count"]
 
-    # 获取调仓配比
+    # 获取QQQ调仓配比（5级方案）
     alloc = get_allocation(nd_triggered, cfg)
     
-    # 计算趋势评分（基于QQQ的DD/VIX/PE）
+    # 计算QQQ趋势评分（基于QQQ的DD/VIX/PE，25级预警）
     dd_val = qqq["drawdown"]
     vix_val = nd["vix"]
     pe_val = nd["qqq_pe"]
     trend = compute_trend_score(dd_val, vix_val, pe_val, cfg)
+
+    # 计算SPY趋势评分（DD/VIX/CAPE，25级直接调仓）
+    spy_dd_val = spy["drawdown"]
+    spy_vix_val = sp["vix"]
+    spy_cape_val = sp["cape"]
+    spy_trend = compute_spy_trend_score(spy_dd_val, spy_vix_val, spy_cape_val, cfg)
+    spy_alloc = get_spy_allocation(spy_trend["step"], cfg)
 
     lines = [
         f"**📊 美股信号日报 | {now_bjt}**",
@@ -540,6 +648,23 @@ def build_daily_report(result: dict, cfg: dict) -> str:
 
     lines.append(f"> {' | '.join(sig_strs)}")
     lines.append(f"> {sp['triggered_count']}/3 触发 → {sp_pos[0]}，{sp_pos[1]}")
+    
+    # SPY 25级趋势评分 + 调仓
+    lines.append(f"> 📊 趋势评分：{spy_trend['score']} (S{spy_trend['step']}) {spy_trend['trend_dir']} {spy_trend['trend_hint']}")
+    
+    spxl_pct = int(spy_alloc["spxl"] * 100)
+    spy_alloc_pct = int(spy_alloc["spy"] * 100)
+    spy_cash_pct = int(spy_alloc["cash"] * 100)
+    
+    spy_alloc_str = f"SPXL {spxl_pct}%"
+    if spxl_pct == 0:
+        spy_alloc_str = f"SPY {spy_alloc_pct}%"
+    elif spy_alloc_pct > 0:
+        spy_alloc_str = f"SPXL {spxl_pct}% | SPY {spy_alloc_pct}%"
+    if spy_cash_pct > 0:
+        spy_alloc_str += f" | 现金 {spy_cash_pct}%"
+    
+    lines.append(f"> 💰 调仓建议：**{spy_alloc_str}** ← {spy_alloc['hint']}")
     lines.append("")
 
     # QQQ 指标行
@@ -601,14 +726,21 @@ def build_alert_report(result: dict, cfg: dict) -> str:
     nd_pos = nd["position"]
     nd_triggered = nd["triggered_count"]
 
-    # 获取调仓配比
+    # 获取QQQ调仓配比（5级方案）
     alloc = get_allocation(nd_triggered, cfg)
     
-    # 计算趋势评分
+    # 计算QQQ趋势评分
     dd_val = qqq["drawdown"]
     vix_val = nd["vix"]
     pe_val = nd["qqq_pe"]
     trend = compute_trend_score(dd_val, vix_val, pe_val, cfg)
+
+    # 计算SPY趋势评分（25级直接调仓）
+    spy_dd_val = spy["drawdown"]
+    spy_vix_val = sp["vix"]
+    spy_cape_val = sp["cape"]
+    spy_trend = compute_spy_trend_score(spy_dd_val, spy_vix_val, spy_cape_val, cfg)
+    spy_alloc = get_spy_allocation(spy_trend["step"], cfg)
 
     # 根据严重程度选择标题
     total = result["total_triggered"]
@@ -639,6 +771,23 @@ def build_alert_report(result: dict, cfg: dict) -> str:
 
     lines.append(f"> {' | '.join(sig_strs)}")
     lines.append(f"> {sp_pos[0]}：{sp_pos[1]}")
+    
+    # SPY 25级趋势评分 + 调仓
+    lines.append(f"> 📊 趋势评分：{spy_trend['score']} (S{spy_trend['step']}) {spy_trend['trend_dir']} {spy_trend['trend_hint']}")
+    
+    spxl_pct = int(spy_alloc["spxl"] * 100)
+    spy_alloc_pct = int(spy_alloc["spy"] * 100)
+    spy_cash_pct = int(spy_alloc["cash"] * 100)
+    
+    spy_alloc_str = f"SPXL {spxl_pct}%"
+    if spxl_pct == 0:
+        spy_alloc_str = f"SPY {spy_alloc_pct}%"
+    elif spy_alloc_pct > 0:
+        spy_alloc_str = f"SPXL {spxl_pct}% | SPY {spy_alloc_pct}%"
+    if spy_cash_pct > 0:
+        spy_alloc_str += f" | 现金 {spy_cash_pct}%"
+    
+    lines.append(f"> 💰 调仓建议：**{spy_alloc_str}** ← {spy_alloc['hint']}")
     lines.append("")
 
     # QQQ 部分
@@ -799,10 +948,19 @@ def run(mode: str = "daily") -> dict:
     print(f"\n[标普500] SPY ${spy['price']}  回撤 {spy['drawdown']}%  峰值 ${spy['peak']}")
     print(f"[标普500] VIX {result['sp500']['vix']}  CAPE {result['sp500']['cape']}")
     print(f"[标普500] {result['sp500']['triggered_count']}/3 → {result['sp500']['position'][0]}")
+    
+    # SPY 25级趋势评分
+    spy_trend = compute_spy_trend_score(spy["drawdown"], result["sp500"]["vix"], result["sp500"]["cape"], cfg)
+    spy_alloc = get_spy_allocation(spy_trend["step"], cfg)
+    print(f"[标普500] 25级评分: {spy_trend['score']} (S{spy_trend['step']}) → SPXL {int(spy_alloc['spxl']*100)}% SPY {int(spy_alloc['spy']*100)}% 现金 {int(spy_alloc['cash']*100)}%")
 
     print(f"\n[纳斯达克100] QQQ ${qqq['price']}  回撤 {qqq['drawdown']}%  峰值 ${qqq['peak']}")
     print(f"[纳斯达克100] VIX {result['nasdaq100']['vix']}  PE {result['nasdaq100']['qqq_pe']}")
     print(f"[纳斯达克100] {result['nasdaq100']['triggered_count']}/3 → {result['nasdaq100']['position'][0]}")
+    
+    # QQQ 趋势评分
+    qqq_trend = compute_trend_score(qqq["drawdown"], result["nasdaq100"]["vix"], result["nasdaq100"]["qqq_pe"], cfg)
+    print(f"[纳斯达克100] 趋势评分: {qqq_trend['score']} (S{qqq_trend['step']}) {qqq_trend['trend_dir']}")
 
     for sig in result["sp500"]["signals"]:
         status = "触发" if sig["triggered"] else "正常"

@@ -191,7 +191,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC
 <!-- === 五级仓位说明 === -->
 <div class="levels-section">
   <div class="levels-card">
-    <div class="levels-title">五级仓位策略说明</div>
+    <div class="levels-title">五级仓位策略说明（QQQ/TQQQ 调仓方案）</div>
     <div class="levels-grid">
       <div class="level-card l1">
         <div class="level-icon">🚀</div>
@@ -311,8 +311,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC
   <div class="trend-card">
     <div class="trend-title">25级趋势评分速查表</div>
     <div class="trend-subtitle">
-      趋势评分 = DD风险分 + VIX风险分 + PE风险分，反映市场连续风险水平。评分越高风险越大，仓位逐级递减（每级总仓位-4%）。<br>
-      S1-S3 对应5级方案的 L1 满仓进攻区，S4-S12 对应 L2 偏进攻区，S13-S15 对应 L3 去杠杆区，S16-S21 对应 L4 防守区，S22-S25 对应 L5 避险区。
+      <b>SPY/SPXL</b>：直接用25级评分做调仓决策（DD=-2, VIX=16, CAPE=41, scale=5），收益优于5级方案。<br>
+      <b>QQQ/TQQQ</b>：5级信号做调仓决策，25级趋势评分仅做预警参考。<br>
+      每级总仓位-4%：S1满仓杠杆(SPXL/TQQQ 75%) → S25全现金。
     </div>
     <div class="trend-table-wrap">
       <table class="trend-table">
@@ -320,8 +321,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC
           <tr>
             <th>级别</th>
             <th>评分范围</th>
-            <th>TQQQ</th>
-            <th>QQQ</th>
+            <th>TQQQ<br>SPXL</th>
+            <th>QQQ<br>SPY</th>
             <th>现金</th>
             <th>含义</th>
           </tr>
@@ -531,11 +532,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC
       </table>
     </div>
     <div class="trend-legend">
-      <div class="trend-legend-item"><span class="trend-legend-dot safe"></span> S1-S3 满仓杠杆（对应 L1）</div>
-      <div class="trend-legend-item"><span class="trend-legend-dot mild"></span> S4-S9 高杠杆/偏进攻（对应 L2）</div>
-      <div class="trend-legend-item"><span class="trend-legend-dot mid"></span> S10-S15 半杠杆/去杠杆（对应 L3）</div>
-      <div class="trend-legend-item"><span class="trend-legend-dot warn"></span> S16-S21 中性/防守（对应 L4）</div>
-      <div class="trend-legend-item"><span class="trend-legend-dot danger"></span> S22-S25 重防守/全现金（对应 L5）</div>
+      <div class="trend-legend-item"><span class="trend-legend-dot safe"></span> S1-S3 满仓杠杆（SPXL/TQQQ 75%→56%）</div>
+      <div class="trend-legend-item"><span class="trend-legend-dot mild"></span> S4-S9 高杠杆/偏进攻（SPXL/TQQQ 48%→14%）</div>
+      <div class="trend-legend-item"><span class="trend-legend-dot mid"></span> S10-S15 半杠杆/去杠杆（SPXL/TQQQ→0%）</div>
+      <div class="trend-legend-item"><span class="trend-legend-dot warn"></span> S16-S21 中性/防守（全部SPY/QQQ+现金）</div>
+      <div class="trend-legend-item"><span class="trend-legend-dot danger"></span> S22-S25 重防守/全现金</div>
     </div>
   </div>
 </div>
