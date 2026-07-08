@@ -66,8 +66,13 @@ jobs:
           else
             DATE=$(date -u +%Y-%m-%d)
             git commit -m "auto: update dashboard data ${DATE}"
-            git pull --rebase origin main || true
-            git push
+            # rebase 远程变更；冲突时中止 rebase 并跳过 push（不阻塞 Pages 部署）
+            if git pull --rebase origin main; then
+              git push
+            else
+              echo "⚠️ Rebase 冲突，跳过 push，继续部署 Pages"
+              git rebase --abort || true
+            fi
           fi
 
       - name: Deploy to GitHub Pages
