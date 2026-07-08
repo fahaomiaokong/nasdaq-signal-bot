@@ -17,6 +17,7 @@ import math
 import os
 import re
 import sys
+import time
 import traceback
 from datetime import datetime, timezone, timedelta
 
@@ -74,6 +75,39 @@ def load_config(config_path: str = CONFIG_PATH) -> dict:
         cfg["lookback_days"] = int(os.getenv("LOOKBACK_DAYS"))
 
     return cfg
+
+
+# ---------------------------------------------------------------------------
+# yfinance 重试机制
+# ---------------------------------------------------------------------------
+
+YF_MAX_RETRIES = 3
+YF_RETRY_DELAY = 5  # 秒
+
+
+def yf_retry(func, *args, max_retries=YF_MAX_RETRIES, delay=YF_RETRY_DELAY, **kwargs):
+    """对 yfinance 调用进行重试包装。
+
+    yfinance 的 SSL 证书错误经常是间歇性的，重试 2-3 次通常能成功。
+    """
+    last_exc = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            result = func(*args, **kwargs)
+            if result is not None:
+                return result
+            print(f"  [yfinance] 第 {attempt}/{max_retries} 次返回空结果")
+        except Exception as e:
+            last_exc = e
+            print(f"  [yfinance] 第 {attempt}/{max_retries} 次失败: {e}")
+
+        if attempt < max_retries:
+            print(f"  [yfinance] 等待 {delay} 秒后重试...")
+            time.sleep(delay)
+
+    if last_exc:
+        print(f"  [yfinance] 重试 {max_retries} 次后仍失败")
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -407,14 +441,19 @@ def signal_icon_warn(triggered: bool, value: float, threshold: float, is_upper: 
 # ---------------------------------------------------------------------------
 
 def get_etf_data(ticker: str, name: str, lookback_days: int = 252) -> dict:
-    """获取 ETF 历史数据，计算当前价格和回撤。"""
+    """获取 ETF 历史数据，计算当前价格和回撤。内置重试机制。"""
     import yfinance as yf
 
-    etf = yf.Ticker(ticker)
-    hist = etf.history(period=f"{lookback_days}d")
+    def _fetch():
+        etf = yf.Ticker(ticker)
+        hist = etf.history(period=f"{lookback_days}d")
+        if hist.empty:
+            return None
+        return hist
 
-    if hist.empty:
-        raise ValueError(f"无法获取 {name} 历史数据")
+    hist = yf_retry(_fetch)
+    if hist is None:
+        raise ValueError(f"无法获取 {name} 历史数据（已重试 {YF_MAX_RETRIES} 次）")
 
     current_price = round(float(hist["Close"].iloc[-1]), 2)
     peak_price = round(float(hist["Close"].max()), 2)
@@ -430,14 +469,19 @@ def get_etf_data(ticker: str, name: str, lookback_days: int = 252) -> dict:
 
 
 def get_volatility_index(ticker: str, name: str) -> float:
-    """获取波动率指数当前值。"""
+    """获取波动率指数当前值。内置重试机制。"""
     import yfinance as yf
 
-    idx = yf.Ticker(ticker)
-    hist = idx.history(period="5d")
+    def _fetch():
+        idx = yf.Ticker(ticker)
+        hist = idx.history(period="5d")
+        if hist.empty:
+            return None
+        return hist
 
-    if hist.empty:
-        raise ValueError(f"无法获取 {name} 数据")
+    hist = yf_retry(_fetch)
+    if hist is None:
+        raise ValueError(f"无法获取 {name} 数据（已重试 {YF_MAX_RETRIES} 次）")
 
     return round(float(hist["Close"].iloc[-1]), 2)
 
@@ -513,17 +557,20 @@ def get_qqq_pe() -> float:
     except Exception as e:
         print(f"[QQQ PE] 读取 dashboard_data.json 失败: {e}")
 
-    # 备用：从 yfinance 获取
+    # 备用：从 yfinance 获取（带重试）
     import yfinance as yf
 
-    try:
+    def _fetch_pe():
         qqq = yf.Ticker("QQQ")
         info = qqq.info
         pe = info.get("trailingPE") or info.get("regularMarketPE")
         if pe is not None:
             return round(float(pe), 2)
-    except Exception as e:
-        print(f"[QQQ PE] yfinance 获取失败: {e}")
+        return None
+
+    pe_val = yf_retry(_fetch_pe, delay=3)
+    if pe_val is not None:
+        return pe_val
 
     return -1.0
 
@@ -921,8 +968,15 @@ def build_no_trade_report(cfg: dict) -> str:
     # 尝试获取最新价格（即使非交易日，yfinance 仍有上一个交易日数据）
     try:
         import yfinance as yf
-        spy_price = round(float(yf.Ticker("SPY").history(period="5d")["Close"].iloc[-1]), 2)
-        qqq_price = round(float(yf.Ticker("QQQ").history(period="5d")["Close"].iloc[-1]), 2)
+
+        def _fetch_price(t):
+            h = yf.Ticker(t).history(period="5d")
+            if h.empty:
+                return None
+            return round(float(h["Close"].iloc[-1]), 2)
+
+        spy_price = yf_retry(_fetch_price, "SPY", delay=3) or "—"
+        qqq_price = yf_retry(_fetch_price, "QQQ", delay=3) or "—"
     except Exception:
         spy_price = "—"
         qqq_price = "—"

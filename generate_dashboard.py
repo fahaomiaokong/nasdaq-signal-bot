@@ -231,51 +231,78 @@ def fetch_shiller_data():
 # ---------------------------------------------------------------------------
 
 def fetch_daily_data():
-    """从 yfinance 批量下载日度数据。返回 dict 或 None。"""
+    """从 yfinance 批量下载日度数据。返回 dict 或 None。
+
+    内置重试机制：yfinance 的 SSL 证书错误经常是间歇性的，
+    重试 2-3 次通常能成功，避免回退到过时的内置月度数据。
+    """
     import yfinance as yf
 
-    print("  尝试 yfinance 批量下载日度数据...")
-    try:
-        data = yf.download(
-            ["SPY", "QQQ", "^VIX"],
-            start="1993-02-01",
-            end=datetime.now(BJT).strftime("%Y-%m-%d"),
-            group_by="ticker",
-            auto_adjust=True,
-            threads=True,
-        )
-        if data.empty:
-            print("  yfinance 返回空数据，将回退到内置月度数据")
-            return None
+    MAX_RETRIES = 3
+    RETRY_DELAY = 5  # 秒
 
-        results = {}
-        for ticker, col_name in [("SPY", "SPY"), ("QQQ", "QQQ"), ("VIX", "^VIX")]:
-            try:
-                sub = data[col_name] if col_name in data.columns.get_level_values(0) else None
-                if sub is None or sub.empty:
-                    if ticker == "VIX":
-                        sub = data["^VIX"] if "^VIX" in data.columns.get_level_values(0) else None
+    for attempt in range(1, MAX_RETRIES + 1):
+        print(f"  尝试 yfinance 批量下载日度数据 (第 {attempt}/{MAX_RETRIES} 次)...")
+        try:
+            data = yf.download(
+                ["SPY", "QQQ", "^VIX"],
+                start="1993-02-01",
+                end=datetime.now(BJT).strftime("%Y-%m-%d"),
+                group_by="ticker",
+                auto_adjust=True,
+                threads=True,
+            )
+            if data.empty:
+                print(f"  yfinance 返回空数据 (第 {attempt} 次)")
+                if attempt < MAX_RETRIES:
+                    print(f"  等待 {RETRY_DELAY} 秒后重试...")
+                    time.sleep(RETRY_DELAY)
                     continue
-                closes = sub["Close"].dropna()
-                if len(closes) == 0:
-                    continue
-                results[ticker] = {
-                    "dates": [d.strftime("%Y-%m-%d") for d in closes.index],
-                    "values": [round(float(v), 2) for v in closes.values],
-                }
-                print(f"  {ticker}: {len(closes)} 个交易日, {closes.index[0].strftime('%Y-%m-%d')} ~ {closes.index[-1].strftime('%Y-%m-%d')}")
-            except Exception as e:
-                print(f"  {ticker} 提取失败: {e}")
+                print("  ✗ 重试已用尽，将回退到内置月度数据")
+                return None
 
-        if len(results) < 2:
-            print("  获取数据不足，将回退到内置月度数据")
-            return None
+            results = {}
+            for ticker, col_name in [("SPY", "SPY"), ("QQQ", "QQQ"), ("VIX", "^VIX")]:
+                try:
+                    sub = data[col_name] if col_name in data.columns.get_level_values(0) else None
+                    if sub is None or sub.empty:
+                        if ticker == "VIX":
+                            sub = data["^VIX"] if "^VIX" in data.columns.get_level_values(0) else None
+                        continue
+                    closes = sub["Close"].dropna()
+                    if len(closes) == 0:
+                        continue
+                    results[ticker] = {
+                        "dates": [d.strftime("%Y-%m-%d") for d in closes.index],
+                        "values": [round(float(v), 2) for v in closes.values],
+                    }
+                    print(f"  {ticker}: {len(closes)} 个交易日, {closes.index[0].strftime('%Y-%m-%d')} ~ {closes.index[-1].strftime('%Y-%m-%d')}")
+                except Exception as e:
+                    print(f"  {ticker} 提取失败: {e}")
 
-        return results
+            if len(results) >= 2:
+                print(f"  ✓ yfinance 下载成功 (第 {attempt} 次尝试)")
+                return results
 
-    except Exception as e:
-        print(f"  yfinance 下载失败: {e}")
-        return None
+            # 数据不足，可能是部分 ticker 下载失败
+            print(f"  获取数据不足 ({len(results)}/3 ticker 成功，第 {attempt} 次)")
+            if attempt < MAX_RETRIES:
+                print(f"  等待 {RETRY_DELAY} 秒后重试...")
+                time.sleep(RETRY_DELAY)
+            else:
+                print("  ✗ 重试已用尽，将回退到内置月度数据")
+                return None
+
+        except Exception as e:
+            print(f"  yfinance 下载失败 (第 {attempt} 次): {e}")
+            if attempt < MAX_RETRIES:
+                print(f"  等待 {RETRY_DELAY} 秒后重试...")
+                time.sleep(RETRY_DELAY)
+            else:
+                print("  ✗ 重试已用尽，将回退到内置月度数据")
+                return None
+
+    return None
 
 
 def try_fetch_cape_live():
@@ -298,18 +325,29 @@ def try_fetch_cape_live():
 
 
 def try_fetch_qqq_pe_live():
-    """尝试获取最新 QQQ PE 值。"""
+    """尝试获取最新 QQQ PE 值。内置重试机制。"""
     import yfinance as yf
-    try:
-        qqq = yf.Ticker("QQQ")
-        info = qqq.info
-        pe = info.get("trailingPE") or info.get("regularMarketPE")
-        if pe is not None:
-            val = round(float(pe), 2)
-            print(f"  最新 QQQ PE: {val}")
-            return val
-    except Exception:
-        pass
+
+    MAX_RETRIES = 3
+    RETRY_DELAY = 3  # 秒
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            qqq = yf.Ticker("QQQ")
+            info = qqq.info
+            pe = info.get("trailingPE") or info.get("regularMarketPE")
+            if pe is not None:
+                val = round(float(pe), 2)
+                print(f"  最新 QQQ PE: {val} (第 {attempt} 次尝试成功)")
+                return val
+            else:
+                print(f"  QQQ PE 为 None (第 {attempt} 次)")
+        except Exception as e:
+            print(f"  QQQ PE 获取失败 (第 {attempt} 次): {e}")
+
+        if attempt < MAX_RETRIES:
+            time.sleep(RETRY_DELAY)
+
     return None
 
 
