@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三信号历史情景分析 - 优化版</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+<style>
+* { box-sizing: border-box; }
+:root {
+  --bg: #f5f6f7; --card: #fff; --border: #e2e4e8; --text: #1a1a2e;
+  --text2: #6b7280; --l1: #16a34a; --l2: #22c55e; --l3: #eab308;
+  --l4: #f97316; --l5: #ef4444; --blue: #2563eb; --purple: #7c3aed;
+}
+body {
+  font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background: var(--bg); color: var(--text); margin:0; padding:12px;
+  line-height:1.6;
+}
+.top-bar {
+  background: var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:14px 18px; margin-bottom:12px; display:flex; flex-wrap:wrap;
+  align-items:center; gap:12px;
+}
+.top-bar h1 { font-size:18px; font-weight:700; margin:0; }
+.top-bar .subtitle { font-size:13px; color:var(--text2); margin:0 0 0 10px; }
+.signal-badges { display:flex; gap:8px; margin-left:auto; flex-wrap:wrap; }
+.badge {
+  padding:4px 12px; border-radius:6px; font-size:12px; font-weight:600;
+  white-space:nowrap;
+}
+.range-btns { display:flex; gap:4px; margin-bottom:10px; }
+.range-btns button {
+  padding:6px 14px; border:1px solid var(--border); border-radius:6px;
+  background:var(--card); font-size:12px; cursor:pointer; transition:all .2s;
+}
+.range-btns button:hover { background:#e8eaed; }
+.range-btns button.active { background:var(--blue); color:#fff; border-color:var(--blue); }
+
+.panel {
+  background: var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:12px 14px; margin-bottom:12px;
+}
+.panel h2 { font-size:14px; font-weight:600; margin:0 0 6px; display:flex; align-items:center; gap:6px; }
+.panel h2 .tag {
+  font-size:10px; padding:2px 8px; border-radius:4px;
+  background:#f0f1f3; color:var(--text2);
+}
+canvas { max-width:100%; }
+
+.tabs { display:flex; gap:2px; margin-bottom:10px; }
+.tab-btn {
+  padding:8px 16px; border:1px solid var(--border); border-radius:8px 8px 0 0;
+  background:#f0f1f3; font-size:13px; font-weight:500; cursor:pointer; transition:all .2s;
+}
+.tab-btn.active { background:var(--card); border-bottom-color:var(--card); font-weight:600; }
+.tab-content { display:none; }
+.tab-content.active { display:block; }
+
+.fwd-table { width:100%; border-collapse:collapse; font-size:13px; }
+.fwd-table th { background:#f0f1f3; padding:8px 10px; text-align:left; font-weight:600; border-bottom:2px solid var(--border); }
+.fwd-table td { padding:7px 10px; border-bottom:1px solid #e8eaed; }
+.fwd-table tr:hover { background:#f8f9fa; }
+.val-pos { color:#16a34a; font-weight:600; }
+.val-neg { color:#ef4444; font-weight:600; }
+
+.events-list { max-height:400px; overflow-y:auto; }
+.ev-row { display:flex; align-items:center; padding:6px 0; border-bottom:1px solid #eee; font-size:13px; gap:8px; }
+.ev-row:last-child { border:none; }
+.ev-date { width:65px; font-weight:600; color:var(--blue); }
+.ev-name { width:130px; font-weight:500; }
+.ev-sigs { display:flex; gap:4px; flex-wrap:wrap; }
+.sig { padding:2px 7px; border-radius:4px; font-size:11px; font-weight:600; }
+.sig-cape-cheap { background:#dcfce7; color:#15803d; }
+.sig-cape-mid { background:#fef9c3; color:#a16207; }
+.sig-cape-exp { background:#fee2e2; color:#dc2626; }
+.sig-vix-calm { background:#dbeafe; color:#1d4ed8; }
+.sig-vix-panic { background:#fed7aa; color:#c2410c; }
+.sig-dd-ok { background:#ede9fe; color:#6d28d9; }
+.sig-dd-bad { background:#fee2e2; color:#b91c1c; }
+.sig-pos { padding:2px 7px; border-radius:4px; font-size:11px; font-weight:700; }
+.pos-l1 { background:#bbf7d0; color:#14532d; }
+.pos-l2 { background:#d9f99d; color:#166534; }
+.pos-l3 { background:#fef08a; color:#854d0e; }
+.pos-l4 { background:#fed7aa; color:#9a3412; }
+.pos-l5 { background:#fecaca; color:#991b1b; }
+
+.scenario-table { width:100%; border-collapse:collapse; font-size:12px; }
+.scenario-table th { background:#f0f1f3; padding:6px 8px; text-align:left; font-weight:600; border-bottom:2px solid var(--border); }
+.scenario-table td { padding:5px 8px; border-bottom:1px solid #e8eaed; }
+.scenario-table tr:hover { background:#f0f8ff; }
+.scenario-table tr.highlight { background:#dbeafe; }
+.freq-bar { display:inline-block; height:14px; background:var(--blue); border-radius:2px; vertical-align:middle; opacity:0.7; }
+
+footer { text-align:center; padding:10px; font-size:11px; color:var(--text2); margin-top:8px; }
+
+@media (max-width: 768px) {
+  .top-bar { flex-direction:column; gap:8px; }
+  .signal-badges { margin-left:0; }
+  .ev-name { width:100px; }
+}
+</style>
+</head>
+<body>
+<div class="top-bar"><h1>三信号历史情景综合分析</h1><span class="subtitle">403个月真实数据 | 1993-2026</span><div class="signal-badges"><div class="badge" style="background:#fee2e2;color:#dc2626;">CAPE 40.03 (极贵)</div><div class="badge" style="background:#dbeafe;color:#1d4ed8;">VIX 15.57 (温和)</div><div class="badge" style="background:#ede9fe;color:#6d28d9;">DD -0.43% (正常)</div><div class="badge" style="background:#fecaca;color:#991b1b;font-weight:700;">→ L5-100%现金</div></div></div><div class="range-btns"><button class="active" onclick="setRange('all',this)">全部</button><button onclick="setRange('1998-1999',this)">LTCM危机</button><button onclick="setRange('2000-2003',this)">互联网泡沫</button><button onclick="setRange('2007-2010',this)">金融海啸</button><button onclick="setRange('2018-2019',this)">2018波动</button><button onclick="setRange('2020-2021',this)">COVID</button><button onclick="setRange('2022-2023',this)">加息熊市</button><button onclick="setRange('2024-2026',this)">近两年</button></div><div class="panel"><h2>SPY价格 & 回撤DD <span class="tag">上面板</span></h2><canvas id="chartSPY" height="180"></canvas></div><div class="panel"><h2>CAPE估值 & VIX恐慌 <span class="tag">下面板</span></h2><canvas id="chartCV" height="180"></canvas></div><div class="panel"><h2>策略回测：L1-L5仓位 vs SPY买入持有 <span class="tag">策略验证</span></h2><canvas id="chartBT" height="140"></canvas><div style="display:flex;gap:12px;margin-top:8px;font-size:13px;"><div style="background:#dcfce7;padding:4px 12px;border-radius:6px;">策略累计：376.51 倍</div><div style="background:#dbeafe;padding:4px 12px;border-radius:6px;">SPY买入持有：31.16 倍</div><div style="background:#fef08a;padding:4px 12px;border-radius:6px;">策略/持有：12.08 倍</div></div></div><div class="tabs"><div class="tab-btn active" onclick="switchTab('fwd',this)">前瞻收益</div><div class="tab-btn" onclick="switchTab('events',this)">关键事件</div><div class="tab-btn" onclick="switchTab('scenario',this)">情景排名</div></div><div class="tab-content active" id="tab-fwd"><div class="panel"><h2>CAPE区间 → 未来SPY收益</h2><table class="fwd-table"><thead><tr><th>区间</th><th>月数</th><th>6月均值</th><th>12月均值</th><th>24月均值</th><th>12月中位</th><th>12月最差</th><th>12月最好</th></tr></thead><tbody><tr><td><span class="sig sig-cape-cheap">便宜</span></td><td>12</td><td class="val-pos">16.51%</td><td class="val-pos">23.33%</td><td class="val-pos">43.3%</td><td class="val-pos">15.86%</td><td class="val-pos">4.74%</td><td class="val-pos">53.25%</td></tr><tr><td><span class="sig sig-cape-cheap">合理</span></td><td>144</td><td class="val-pos">6.64%</td><td class="val-pos">15.32%</td><td class="val-pos">35.86%</td><td class="val-pos">17.42%</td><td class="val-neg">-43.42%</td><td class="val-pos">51.39%</td></tr><tr><td><span class="sig sig-cape-mid">偏贵</span></td><td>108</td><td class="val-pos">5.98%</td><td class="val-pos">11.36%</td><td class="val-pos">23.98%</td><td class="val-pos">12.14%</td><td class="val-neg">-38.12%</td><td class="val-pos">47.98%</td></tr><tr><td><span class="sig sig-cape-exp">昂贵</span></td><td>72</td><td class="val-pos">6.04%</td><td class="val-pos">14.15%</td><td class="val-pos">24.59%</td><td class="val-pos">16.24%</td><td class="val-neg">-24.74%</td><td class="val-pos">56.23%</td></tr><tr><td><span class="sig sig-cape-exp">极贵</span></td><td>55</td><td class="val-pos">0.52%</td><td class="val-neg">-0.3%</td><td class="val-neg">-3.23%</td><td class="val-neg">-0.79%</td><td class="val-neg">-26.38%</td><td class="val-pos">31.08%</td></tr></tbody></table><h2 style="margin-top:12px;">VIX区间 → 未来SPY收益</h2><table class="fwd-table"><thead><tr><th>区间</th><th>月数</th><th>6月均值</th><th>12月均值</th><th>24月均值</th><th>12月中位</th><th>12月最差</th><th>12月最好</th></tr></thead><tbody><tr><td><span class="sig sig-vix-calm">平静</span></td><td>126</td><td class="val-pos">6.35%</td><td class="val-pos">13.38%</td><td class="val-pos">28.98%</td><td class="val-pos">13.93%</td><td class="val-neg">-6.89%</td><td class="val-pos">38.31%</td></tr><tr><td><span class="sig sig-vix-calm">温和</span></td><td>114</td><td class="val-pos">5.09%</td><td class="val-pos">12.68%</td><td class="val-pos">28.58%</td><td class="val-pos">15.52%</td><td class="val-neg">-36.06%</td><td class="val-pos">51.39%</td></tr><tr><td><span class="sig sig-vix-panic">不安</span></td><td>77</td><td class="val-pos">2.48%</td><td class="val-pos">5.67%</td><td class="val-pos">14.81%</td><td class="val-pos">9.9%</td><td class="val-neg">-38.12%</td><td class="val-pos">47.98%</td></tr><tr><td><span class="sig sig-vix-panic">恐慌</span></td><td>42</td><td class="val-pos">6.69%</td><td class="val-pos">9.2%</td><td class="val-pos">18.07%</td><td class="val-pos">12.54%</td><td class="val-neg">-43.42%</td><td class="val-pos">40.24%</td></tr><tr><td><span class="sig sig-vix-panic">极度恐慌</span></td><td>32</td><td class="val-pos">12.88%</td><td class="val-pos">23.79%</td><td class="val-pos">39.38%</td><td class="val-pos">25.5%</td><td class="val-neg">-20.57%</td><td class="val-pos">56.23%</td></tr></tbody></table><h2 style="margin-top:12px;">回撤区间 → 未来SPY收益</h2><table class="fwd-table"><thead><tr><th>区间</th><th>月数</th><th>6月均值</th><th>12月均值</th><th>24月均值</th><th>12月中位</th><th>12月最差</th><th>12月最好</th></tr></thead><tbody><tr><td><span class="sig sig-dd-ok">正常</span></td><td>226</td><td class="val-pos">6.72%</td><td class="val-pos">13.54%</td><td class="val-pos">27.03%</td><td class="val-pos">16.25%</td><td class="val-neg">-38.12%</td><td class="val-pos">51.39%</td></tr><tr><td><span class="sig sig-dd-ok">小回调</span></td><td>47</td><td class="val-pos">5.13%</td><td class="val-pos">11.39%</td><td class="val-pos">21.41%</td><td class="val-pos">14.83%</td><td class="val-neg">-35.11%</td><td class="val-pos">45.96%</td></tr><tr><td><span class="sig sig-dd-bad">中等回调</span></td><td>53</td><td class="val-pos">2.12%</td><td class="val-pos">6.42%</td><td class="val-pos">23.19%</td><td class="val-pos">9.81%</td><td class="val-neg">-43.42%</td><td class="val-pos">56.23%</td></tr><tr><td><span class="sig sig-dd-bad">深度崩盘</span></td><td>65</td><td class="val-pos">6.04%</td><td class="val-pos">11.99%</td><td class="val-pos">26.71%</td><td class="val-pos">12.86%</td><td class="val-neg">-24.74%</td><td class="val-pos">53.25%</td></tr></tbody></table></div></div><div class="tab-content" id="tab-events"><div class="panel"><h2>关键市场事件三信号组合</h2><div class="events-list"><div class="ev-row"><div class="ev-date">1998-08</div><div class="ev-name">亚洲金融危机/LTCM</div><div class="ev-sigs"><span class="sig sig-cape-exp">CAPE 32.86</span><span class="sig sig-vix-panic">VIX 44.28</span><span class="sig sig-dd-bad">DD -15.28%</span><span class="sig-pos pos-l5">L5-100%现金</span></div></div><div class="ev-row"><div class="ev-date">2000-03</div><div class="ev-name">互联网泡沫顶部</div><div class="ev-sigs"><span class="sig sig-cape-exp">CAPE 43.77</span><span class="sig sig-vix-calm">VIX 24.11</span><span class="sig sig-dd-ok">DD 0.0%</span><span class="sig-pos pos-l5">L5-100%现金</span></div></div><div class="ev-row"><div class="ev-date">2002-10</div><div class="ev-name">互联网泡沫底部</div><div class="ev-sigs"><span class="sig sig-cape-exp">CAPE 30.28</span><span class="sig sig-vix-panic">VIX 31.14</span><span class="sig sig-dd-bad">DD -40.18%</span><span class="sig-pos pos-l5">L5-100%现金</span></div></div><div class="ev-row"><div class="ev-date">2003-03</div><div class="ev-name">伊拉克战争</div><div class="ev-sigs"><span class="sig sig-cape-mid">CAPE 22.9</span><span class="sig sig-vix-panic">VIX 29.15</span><span class="sig sig-dd-bad">DD -42.22%</span><span class="sig-pos pos-l4">L4-50%QQQ+50%现金</span></div></div><div class="ev-row"><div class="ev-date">2007-10</div><div class="ev-name">次贷危机顶部</div><div class="ev-sigs"><span class="sig sig-cape-mid">CAPE 27.21</span><span class="sig sig-vix-calm">VIX 18.53</span><span class="sig sig-dd-ok">DD 0.0%</span><span class="sig-pos pos-l3">L3-100%QQQ</span></div></div><div class="ev-row"><div class="ev-date">2008-09</div><div class="ev-name">雷曼破产/金融海啸</div><div class="ev-sigs"><span class="sig sig-cape-mid">CAPE 24.02</span><span class="sig sig-vix-panic">VIX 39.39</span><span class="sig sig-dd-bad">DD -23.41%</span><span class="sig-pos pos-l5">L5-100%现金</span></div></div><div class="ev-row"><div class="ev-date">2009-03</div><div class="ev-name">全球金融危机底部</div><div class="ev-sigs"><span class="sig sig-cape-cheap">CAPE 15.17</span><span class="sig sig-vix-panic">VIX 44.14</span><span class="sig sig-dd-bad">DD -46.68%</span><span class="sig-pos pos-l5">L5-100%现金</span></div></div><div class="ev-row"><div class="ev-date">2010-05</div><div class="ev-name">欧债危机闪崩</div><div class="ev-sigs"><span class="sig sig-cape-mid">CAPE 20.53</span><span class="sig sig-vix-panic">VIX 32.07</span><span class="sig sig-dd-bad">DD -25.2%</span><span class="sig-pos pos-l5">L5-100%现金</span></div></div><div class="ev-row"><div class="ev-date">2011-08</div><div class="ev-name">美国降级+欧债</div><div class="ev-sigs"><span class="sig sig-cape-mid">CAPE 22.98</span><span class="sig sig-vix-panic">VIX 31.62</span><span class="sig sig-dd-bad">DD -14.33%</span><span class="sig-pos pos-l5">L5-100%现金</span></div></div><div class="ev-row"><div class="ev-date">2015-08</div><div class="ev-name">中国股灾波及</div><div class="ev-sigs"><span class="sig sig-cape-mid">CAPE 26.49</span><span class="sig sig-vix-panic">VIX 28.43</span><span class="sig sig-dd-ok">DD -6.1%</span><span class="sig-pos pos-l4">L4-50%QQQ+50%现金</span></div></div><div class="ev-row"><div class="ev-date">2018-02</div><div class="ev-name">VIX风暴</div><div class="ev-sigs"><span class="sig sig-cape-exp">CAPE 33.31</span><span class="sig sig-vix-calm">VIX 19.85</span><span class="sig sig-dd-ok">DD -3.64%</span><span class="sig-pos pos-l4">L4-50%QQQ+50%现金</span></div></div><div class="ev-row"><div class="ev-date">2018-12</div><div class="ev-name">美联储加息恐慌</div><div class="ev-sigs"><span class="sig sig-cape-exp">CAPE 33.31</span><span class="sig sig-vix-panic">VIX 25.42</span><span class="sig sig-dd-bad">DD -13.53%</span><span class="sig-pos pos-l4">L4-50%QQQ+50%现金</span></div></div><div class="ev-row"><div class="ev-date">2020-03</div><div class="ev-name">COVID崩盘</div><div class="ev-sigs"><span class="sig sig-cape-exp">CAPE 30.99</span><span class="sig sig-vix-panic">VIX 53.54</span><span class="sig sig-dd-bad">DD -19.45%</span><span class="sig-pos pos-l5">L5-100%现金</span></div></div><div class="ev-row"><div class="ev-date">2020-08</div><div class="ev-name">COVID反弹高点</div><div class="ev-sigs"><span class="sig sig-cape-exp">CAPE 30.99</span><span class="sig sig-vix-panic">VIX 26.41</span><span class="sig sig-dd-ok">DD 0.0%</span><span class="sig-pos pos-l4">L4-50%QQQ+50%现金</span></div></div><div class="ev-row"><div class="ev-date">2021-11</div><div class="ev-name">通胀顶部</div><div class="ev-sigs"><span class="sig sig-cape-exp">CAPE 34.51</span><span class="sig sig-vix-panic">VIX 27.19</span><span class="sig sig-dd-ok">DD -0.8%</span><span class="sig-pos pos-l4">L4-50%QQQ+50%现金</span></div></div><div class="ev-row"><div class="ev-date">2022-06</div><div class="ev-name">加息熊市底部</div><div class="ev-sigs"><span class="sig sig-cape-exp">CAPE 36.94</span><span class="sig sig-vix-panic">VIX 28.71</span><span class="sig sig-dd-bad">DD -19.98%</span><span class="sig-pos pos-l5">L5-100%现金</span></div></div><div class="ev-row"><div class="ev-date">2022-10</div><div class="ev-name">加息熊市真底部</div><div class="ev-sigs"><span class="sig sig-cape-exp">CAPE 36.94</span><span class="sig sig-vix-panic">VIX 25.88</span><span class="sig sig-dd-bad">DD -17.74%</span><span class="sig-pos pos-l5">L5-100%现金</span></div></div><div class="ev-row"><div class="ev-date">2024-12</div><div class="ev-name">AI热潮高位</div><div class="ev-sigs"><span class="sig sig-cape-exp">CAPE 31.97</span><span class="sig sig-vix-calm">VIX 17.35</span><span class="sig sig-dd-ok">DD -2.41%</span><span class="sig-pos pos-l4">L4-50%QQQ+50%现金</span></div></div></div></div></div><div class="tab-content" id="tab-scenario"><div class="panel"><h2>情景组合频率 + 前瞻收益排名</h2><table class="scenario-table"><thead><tr><th>#</th><th>情景组合</th><th>月数</th><th>占比</th><th>12月均收益</th><th>24月均收益</th><th>建议仓位</th><th>频率</th></tr></thead><tbody><tr><td>1</td><td>L2-合理 | 平静 | 正常</td><td>57</td><td>14.1%</td><td class="val-pos">16.2%</td><td class="val-pos">38.6%</td><td><span class="sig-pos pos-l2">L2-70%TQQQ+30%QQQ</span></td><td><span class="freq-bar" style="width:42px;"></span></td></tr><tr><td>2</td><td>L3-偏贵 | 平静 | 正常</td><td>35</td><td>8.7%</td><td class="val-pos">10.48%</td><td class="val-pos">17.93%</td><td><span class="sig-pos pos-l3">L3-100%QQQ</span></td><td><span class="freq-bar" style="width:26px;"></span></td></tr><tr><td>3</td><td>L2-合理 | 温和 | 正常</td><td>32</td><td>7.9%</td><td class="val-pos">23.27%</td><td class="val-pos">45.0%</td><td><span class="sig-pos pos-l2">L2-70%TQQQ+30%QQQ</span></td><td><span class="freq-bar" style="width:23px;"></span></td></tr><tr><td>4</td><td>L4-昂贵 | 温和 | 正常</td><td>19</td><td>4.7%</td><td class="val-pos">5.88%</td><td class="val-pos">16.86%</td><td><span class="sig-pos pos-l4">L4-50%QQQ+50%现金</span></td><td><span class="freq-bar" style="width:14px;"></span></td></tr><tr><td>5</td><td>L5-极贵 | 温和 | 正常</td><td>17</td><td>4.2%</td><td class="val-pos">9.49%</td><td class="val-neg">-34.22%</td><td><span class="sig-pos pos-l5">L5-100%现金</span></td><td><span class="freq-bar" style="width:12px;"></span></td></tr><tr><td>6</td><td>L3-偏贵 | 温和 | 正常</td><td>15</td><td>3.7%</td><td class="val-pos">4.56%</td><td class="val-pos">22.54%</td><td><span class="sig-pos pos-l3">L3-100%QQQ</span></td><td><span class="freq-bar" style="width:11px;"></span></td></tr><tr><td>7</td><td>L3-偏贵 | 不安 | 正常</td><td>12</td><td>3.0%</td><td class="val-pos">9.4%</td><td class="val-pos">26.95%</td><td><span class="sig-pos pos-l3">L3-100%QQQ</span></td><td><span class="freq-bar" style="width:9px;"></span></td></tr><tr><td>8</td><td>L3-偏贵 | 平静 | 中等回调</td><td>12</td><td>3.0%</td><td class="val-pos">9.54%</td><td class="val-pos">25.09%</td><td><span class="sig-pos pos-l3">L3-100%QQQ</span></td><td><span class="freq-bar" style="width:9px;"></span></td></tr><tr><td>9</td><td>L4-昂贵 | 不安 | 正常</td><td>11</td><td>2.7%</td><td class="val-pos">21.0%</td><td class="val-pos">24.61%</td><td><span class="sig-pos pos-l4">L4-50%QQQ+50%现金</span></td><td><span class="freq-bar" style="width:8px;"></span></td></tr><tr><td>10</td><td>L5-极贵 | 不安 | 正常</td><td>11</td><td>2.7%</td><td class="val-neg">-0.18%</td><td class="val-neg">-13.27%</td><td><span class="sig-pos pos-l5">L5-100%现金</span></td><td><span class="freq-bar" style="width:8px;"></span></td></tr><tr><td>11</td><td>L4-昂贵 | 平静 | 正常</td><td>10</td><td>2.5%</td><td class="val-pos">10.81%</td><td class="val-pos">31.56%</td><td><span class="sig-pos pos-l4">L4-50%QQQ+50%现金</span></td><td><span class="freq-bar" style="width:7px;"></span></td></tr><tr><td>12</td><td>L5-极贵 | 不安 | 小回调</td><td>8</td><td>2.0%</td><td class="val-neg">-5.88%</td><td class="val-neg">-23.82%</td><td><span class="sig-pos pos-l5">L5-100%现金</span></td><td><span class="freq-bar" style="width:6px;"></span></td></tr><tr><td>13</td><td>L5-极贵 | 恐慌 | 中等回调</td><td>8</td><td>2.0%</td><td class="val-pos">0.09%</td><td class="val-pos">8.3%</td><td><span class="sig-pos pos-l5">L5-100%现金</span></td><td><span class="freq-bar" style="width:6px;"></span></td></tr><tr><td>14</td><td>L2-合理 | 极度恐慌 | 深度崩盘</td><td>8</td><td>2.0%</td><td class="val-pos">21.86%</td><td class="val-pos">34.21%</td><td><span class="sig-pos pos-l5">L5-100%现金</span></td><td><span class="freq-bar" style="width:6px;"></span></td></tr><tr><td>15</td><td>L2-合理 | 温和 | 深度崩盘</td><td>8</td><td>2.0%</td><td class="val-pos">14.67%</td><td class="val-pos">24.19%</td><td><span class="sig-pos pos-l3">L3-100%QQQ</span></td><td><span class="freq-bar" style="width:6px;"></span></td></tr><tr><td>16</td><td>L4-昂贵 | 恐慌 | 正常</td><td>7</td><td>1.7%</td><td class="val-pos">22.27%</td><td class="val-pos">17.95%</td><td><span class="sig-pos pos-l4">L4-50%QQQ+50%现金</span></td><td><span class="freq-bar" style="width:5px;"></span></td></tr><tr><td>17</td><td>L3-偏贵 | 温和 | 深度崩盘</td><td>7</td><td>1.7%</td><td class="val-pos">8.77%</td><td class="val-pos">20.59%</td><td><span class="sig-pos pos-l3">L3-100%QQQ</span></td><td><span class="freq-bar" style="width:5px;"></span></td></tr><tr><td>18</td><td>L3-偏贵 | 平静 | 小回调</td><td>7</td><td>1.7%</td><td class="val-pos">14.93%</td><td class="val-pos">6.38%</td><td><span class="sig-pos pos-l3">L3-100%QQQ</span></td><td><span class="freq-bar" style="width:5px;"></span></td></tr><tr><td>19</td><td>L2-合理 | 不安 | 中等回调</td><td>7</td><td>1.7%</td><td class="val-neg">-2.25%</td><td class="val-pos">12.33%</td><td><span class="sig-pos pos-l3">L3-100%QQQ</span></td><td><span class="freq-bar" style="width:5px;"></span></td></tr><tr><td>20</td><td>L3-偏贵 | 温和 | 中等回调</td><td>6</td><td>1.5%</td><td class="val-pos">22.18%</td><td class="val-pos">40.14%</td><td><span class="sig-pos pos-l3">L3-100%QQQ</span></td><td><span class="freq-bar" style="width:4px;"></span></td></tr></tbody></table></div></div><footer>数据来源: yfinance + multpl.com | 策略回测基于月度数据简化模拟 | 过往表现不代表未来收益</footer><script>var dates = ["1993-01", "1993-02", "1993-03", "1993-04", "1993-05", "1993-06", "1993-07", "1993-08", "1993-09", "1993-10", "1993-11", "1993-12", "1994-01", "1994-02", "1994-03", "1994-04", "1994-05", "1994-06", "1994-07", "1994-08", "1994-09", "1994-10", "1994-11", "1994-12", "1995-01", "1995-02", "1995-03", "1995-04", "1995-05", "1995-06", "1995-07", "1995-08", "1995-09", "1995-10", "1995-11", "1995-12", "1996-01", "1996-02", "1996-03", "1996-04", "1996-05", "1996-06", "1996-07", "1996-08", "1996-09", "1996-10", "1996-11", "1996-12", "1997-01", "1997-02", "1997-03", "1997-04", "1997-05", "1997-06", "1997-07", "1997-08", "1997-09", "1997-10", "1997-11", "1997-12", "1998-01", "1998-02", "1998-03", "1998-04", "1998-05", "1998-06", "1998-07", "1998-08", "1998-09", "1998-10", "1998-11", "1998-12", "1999-01", "1999-02", "1999-03", "1999-04", "1999-05", "1999-06", "1999-07", "1999-08", "1999-09", "1999-10", "1999-11", "1999-12", "2000-01", "2000-02", "2000-03", "2000-04", "2000-05", "2000-06", "2000-07", "2000-08", "2000-09", "2000-10", "2000-11", "2000-12", "2001-01", "2001-02", "2001-03", "2001-04", "2001-05", "2001-06", "2001-07", "2001-08", "2001-09", "2001-10", "2001-11", "2001-12", "2002-01", "2002-02", "2002-03", "2002-04", "2002-05", "2002-06", "2002-07", "2002-08", "2002-09", "2002-10", "2002-11", "2002-12", "2003-01", "2003-02", "2003-03", "2003-04", "2003-05", "2003-06", "2003-07", "2003-08", "2003-09", "2003-10", "2003-11", "2003-12", "2004-01", "2004-02", "2004-03", "2004-04", "2004-05", "2004-06", "2004-07", "2004-08", "2004-09", "2004-10", "2004-11", "2004-12", "2005-01", "2005-02", "2005-03", "2005-04", "2005-05", "2005-06", "2005-07", "2005-08", "2005-09", "2005-10", "2005-11", "2005-12", "2006-01", "2006-02", "2006-03", "2006-04", "2006-05", "2006-06", "2006-07", "2006-08", "2006-09", "2006-10", "2006-11", "2006-12", "2007-01", "2007-02", "2007-03", "2007-04", "2007-05", "2007-06", "2007-07", "2007-08", "2007-09", "2007-10", "2007-11", "2007-12", "2008-01", "2008-02", "2008-03", "2008-04", "2008-05", "2008-06", "2008-07", "2008-08", "2008-09", "2008-10", "2008-11", "2008-12", "2009-01", "2009-02", "2009-03", "2009-04", "2009-05", "2009-06", "2009-07", "2009-08", "2009-09", "2009-10", "2009-11", "2009-12", "2010-01", "2010-02", "2010-03", "2010-04", "2010-05", "2010-06", "2010-07", "2010-08", "2010-09", "2010-10", "2010-11", "2010-12", "2011-01", "2011-02", "2011-03", "2011-04", "2011-05", "2011-06", "2011-07", "2011-08", "2011-09", "2011-10", "2011-11", "2011-12", "2012-01", "2012-02", "2012-03", "2012-04", "2012-05", "2012-06", "2012-07", "2012-08", "2012-09", "2012-10", "2012-11", "2012-12", "2013-01", "2013-02", "2013-03", "2013-04", "2013-05", "2013-06", "2013-07", "2013-08", "2013-09", "2013-10", "2013-11", "2013-12", "2014-01", "2014-02", "2014-03", "2014-04", "2014-05", "2014-06", "2014-07", "2014-08", "2014-09", "2014-10", "2014-11", "2014-12", "2015-01", "2015-02", "2015-03", "2015-04", "2015-05", "2015-06", "2015-07", "2015-08", "2015-09", "2015-10", "2015-11", "2015-12", "2016-01", "2016-02", "2016-03", "2016-04", "2016-05", "2016-06", "2016-07", "2016-08", "2016-09", "2016-10", "2016-11", "2016-12", "2017-01", "2017-02", "2017-03", "2017-04", "2017-05", "2017-06", "2017-07", "2017-08", "2017-09", "2017-10", "2017-11", "2017-12", "2018-01", "2018-02", "2018-03", "2018-04", "2018-05", "2018-06", "2018-07", "2018-08", "2018-09", "2018-10", "2018-11", "2018-12", "2019-01", "2019-02", "2019-03", "2019-04", "2019-05", "2019-06", "2019-07", "2019-08", "2019-09", "2019-10", "2019-11", "2019-12", "2020-01", "2020-02", "2020-03", "2020-04", "2020-05", "2020-06", "2020-07", "2020-08", "2020-09", "2020-10", "2020-11", "2020-12", "2021-01", "2021-02", "2021-03", "2021-04", "2021-05", "2021-06", "2021-07", "2021-08", "2021-09", "2021-10", "2021-11", "2021-12", "2022-01", "2022-02", "2022-03", "2022-04", "2022-05", "2022-06", "2022-07", "2022-08", "2022-09", "2022-10", "2022-11", "2022-12", "2023-01", "2023-02", "2023-03", "2023-04", "2023-05", "2023-06", "2023-07", "2023-08", "2023-09", "2023-10", "2023-11", "2023-12", "2024-01", "2024-02", "2024-03", "2024-04", "2024-05", "2024-06", "2024-07", "2024-08", "2024-09", "2024-10", "2024-11", "2024-12", "2025-01", "2025-02", "2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07"];var spyP = [24.11, 24.37, 24.92, 24.28, 24.93, 25.02, 24.9, 25.86, 25.67, 26.17, 25.9, 26.21, 27.13, 26.34, 25.23, 25.52, 25.92, 25.33, 26.15, 27.14, 26.46, 27.21, 26.13, 26.32, 27.2, 28.31, 29.1, 29.96, 31.15, 31.78, 32.8, 32.95, 34.35, 34.25, 35.77, 36.33, 37.62, 37.74, 38.39, 38.81, 39.69, 40.04, 38.24, 38.98, 41.16, 42.49, 45.59, 44.5, 47.25, 47.71, 45.6, 48.46, 51.52, 53.64, 57.89, 54.89, 57.53, 56.12, 58.29, 59.4, 60.17, 64.34, 67.48, 68.34, 66.92, 69.77, 68.83, 59.11, 62.87, 67.97, 71.75, 76.45, 79.14, 76.6, 79.78, 82.81, 80.91, 85.39, 82.75, 82.32, 80.48, 85.64, 87.06, 92.03, 87.45, 86.12, 94.47, 91.15, 89.72, 91.48, 90.04, 95.93, 90.67, 90.24, 83.5, 83.07, 86.76, 78.49, 74.09, 80.42, 79.97, 78.06, 77.26, 72.68, 66.75, 67.62, 72.89, 73.3, 72.58, 71.28, 73.65, 69.37, 68.96, 63.87, 58.83, 59.23, 53.02, 57.39, 60.93, 57.48, 56.07, 55.31, 55.43, 60.12, 63.41, 64.09, 65.25, 66.59, 65.86, 69.39, 70.15, 73.68, 75.13, 76.15, 75.14, 73.72, 74.99, 76.37, 73.91, 74.09, 74.84, 75.8, 79.17, 81.56, 79.73, 81.4, 79.91, 78.41, 80.94, 81.06, 84.16, 83.37, 84.04, 82.05, 85.66, 85.5, 87.55, 88.05, 89.5, 90.64, 87.91, 88.13, 88.53, 90.46, 92.9, 95.83, 97.74, 99.04, 100.53, 98.56, 99.7, 104.12, 107.65, 106.08, 102.76, 104.08, 108.1, 109.57, 105.33, 104.14, 97.84, 95.32, 94.46, 98.97, 100.46, 92.07, 91.24, 92.65, 83.92, 70.06, 65.18, 65.82, 60.42, 53.93, 58.42, 64.22, 67.98, 67.93, 73.0, 75.7, 78.38, 76.87, 81.61, 83.17, 80.15, 82.65, 87.68, 89.03, 81.96, 77.72, 83.03, 79.29, 86.39, 89.69, 89.69, 95.69, 97.92, 101.32, 101.33, 104.27, 103.1, 101.36, 99.33, 93.87, 87.35, 96.89, 96.49, 97.5, 102.02, 106.45, 109.88, 109.14, 102.59, 106.75, 108.02, 110.72, 113.53, 111.46, 112.09, 113.09, 118.88, 120.4, 124.97, 127.37, 130.38, 128.64, 135.29, 131.23, 135.38, 141.65, 145.85, 149.63, 144.36, 150.93, 152.18, 153.24, 156.79, 160.03, 157.88, 164.11, 161.85, 165.66, 170.21, 169.78, 164.75, 174.01, 171.27, 172.96, 175.18, 171.62, 175.5, 164.8, 160.6, 174.26, 174.9, 171.87, 163.32, 163.18, 174.16, 174.85, 177.82, 178.44, 184.95, 185.17, 185.18, 181.97, 188.67, 192.5, 195.94, 203.64, 203.89, 205.92, 208.82, 210.15, 214.47, 215.1, 219.43, 224.6, 231.47, 234.28, 247.48, 238.48, 231.95, 233.14, 238.81, 240.19, 249.08, 257.03, 258.56, 240.69, 245.16, 223.57, 241.47, 249.3, 253.81, 264.18, 247.34, 264.55, 268.55, 264.05, 269.19, 275.14, 285.1, 293.38, 293.26, 270.05, 236.33, 266.34, 279.02, 283.97, 300.7, 321.68, 309.64, 301.92, 334.76, 347.16, 343.63, 353.18, 369.21, 388.75, 391.3, 400.08, 409.84, 422.04, 402.37, 430.6, 427.14, 446.9, 423.33, 410.83, 426.28, 388.86, 389.74, 357.6, 390.53, 374.6, 339.97, 367.6, 388.04, 365.67, 388.67, 378.9, 392.95, 399.22, 401.07, 427.06, 441.03, 433.87, 413.29, 404.31, 441.25, 461.39, 468.74, 493.2, 509.33, 488.79, 513.52, 531.63, 538.07, 550.64, 562.21, 557.19, 590.42, 576.22, 591.69, 584.18, 551.63, 546.85, 581.21, 611.08, 625.15, 637.98, 660.71, 676.46, 677.77, 678.32, 688.31, 682.36, 648.67, 716.81, 754.54, 746.77, 751.28];var vixV = [12.42, 13.16, 12.53, 12.42, 13.47, 11.26, 11.73, 11.85, 12.99, 11.46, 13.76, 11.66, 10.63, 14.87, 20.45, 13.77, 13.03, 14.97, 11.13, 11.97, 14.28, 14.56, 15.95, 13.2, 11.96, 11.75, 13.37, 11.75, 12.85, 11.38, 13.49, 11.52, 12.74, 13.83, 11.58, 12.52, 12.53, 17.04, 18.88, 15.83, 16.07, 13.68, 19.46, 17.01, 16.95, 18.11, 17.14, 20.92, 19.47, 21.1, 22.14, 20.06, 19.19, 21.53, 21.48, 24.76, 22.91, 35.09, 27.43, 24.01, 21.47, 18.55, 24.22, 21.18, 21.32, 19.71, 24.8, 44.28, 40.95, 28.05, 26.01, 24.42, 26.25, 27.88, 23.26, 25.07, 25.39, 21.09, 24.64, 24.45, 25.41, 22.2, 24.18, 24.64, 24.95, 23.37, 24.11, 26.2, 23.65, 19.54, 20.74, 16.84, 20.57, 23.63, 29.65, 26.85, 22.02, 28.35, 28.64, 25.48, 22.64, 19.06, 21.62, 24.92, 31.93, 33.56, 23.84, 23.8, 21.09, 21.59, 17.4, 21.91, 19.98, 25.4, 32.03, 32.64, 39.69, 31.14, 27.5, 28.62, 31.17, 29.63, 29.15, 21.21, 19.47, 19.52, 19.49, 18.63, 22.72, 16.1, 16.32, 18.31, 16.63, 14.55, 16.74, 17.19, 15.5, 14.34, 15.32, 15.29, 13.34, 16.27, 13.24, 13.29, 12.82, 12.08, 14.02, 15.31, 13.29, 12.04, 11.57, 12.6, 11.92, 15.32, 12.06, 12.07, 12.95, 12.34, 11.39, 11.59, 16.44, 13.08, 14.95, 12.31, 11.98, 11.1, 10.91, 11.56, 10.42, 15.42, 14.64, 14.22, 13.05, 16.23, 23.52, 23.38, 18.0, 18.53, 22.87, 22.5, 26.2, 26.54, 25.61, 20.79, 17.83, 23.95, 22.94, 20.65, 39.39, 59.89, 55.28, 40.0, 44.84, 46.35, 44.14, 36.5, 28.92, 26.35, 25.92, 26.01, 25.61, 30.69, 24.51, 21.68, 24.62, 19.5, 17.59, 22.05, 32.07, 34.54, 23.5, 26.05, 23.7, 21.2, 23.54, 17.75, 19.53, 18.35, 17.74, 14.75, 15.45, 16.52, 25.25, 31.62, 42.96, 29.96, 27.8, 23.4, 19.44, 18.43, 15.5, 17.15, 24.06, 17.08, 18.93, 17.47, 15.73, 18.6, 15.87, 18.02, 14.28, 15.51, 12.7, 13.52, 16.3, 16.86, 13.45, 17.01, 16.6, 13.75, 13.7, 13.72, 18.41, 14.0, 13.88, 13.41, 11.4, 11.57, 16.95, 12.09, 16.31, 14.03, 13.33, 19.2, 20.97, 13.34, 15.29, 14.55, 13.84, 18.23, 12.12, 28.43, 24.5, 15.07, 16.13, 18.21, 20.2, 20.55, 13.95, 15.7, 14.19, 15.63, 11.87, 13.42, 13.29, 17.06, 13.33, 14.04, 11.99, 12.92, 12.37, 10.82, 10.41, 11.18, 10.26, 10.59, 9.51, 10.18, 11.28, 11.04, 13.54, 19.85, 19.97, 15.93, 15.43, 16.09, 12.83, 12.86, 12.12, 21.23, 18.07, 25.42, 16.57, 14.78, 13.71, 13.12, 18.71, 15.08, 16.12, 18.98, 16.24, 13.22, 12.62, 13.78, 18.84, 40.11, 53.54, 34.15, 27.51, 30.43, 24.46, 26.41, 26.37, 38.02, 20.57, 22.75, 33.09, 27.95, 19.4, 18.61, 16.76, 15.83, 18.24, 16.48, 23.14, 16.26, 27.19, 17.22, 24.83, 30.15, 20.56, 33.4, 26.19, 28.71, 21.33, 25.87, 31.62, 25.88, 20.58, 21.67, 19.4, 20.7, 18.7, 15.78, 17.94, 13.59, 13.63, 13.57, 17.52, 18.14, 12.92, 12.45, 14.35, 13.4, 13.01, 15.65, 12.92, 12.44, 16.36, 15.0, 16.73, 23.16, 13.51, 17.35, 16.43, 19.63, 22.28, 24.7, 18.57, 16.73, 16.72, 15.36, 16.28, 17.44, 16.35, 14.95, 17.44, 19.86, 25.25, 16.89, 15.32, 16.45, 15.57];var capeV = [20.32, 20.32, 20.32, 20.32, 20.32, 20.32, 20.32, 20.32, 20.32, 20.32, 20.32, 20.32, 21.41, 21.41, 21.41, 21.41, 21.41, 21.41, 21.41, 21.41, 21.41, 21.41, 21.41, 21.41, 20.22, 20.22, 20.22, 20.22, 20.22, 20.22, 20.22, 20.22, 20.22, 20.22, 20.22, 20.22, 24.76, 24.76, 24.76, 24.76, 24.76, 24.76, 24.76, 24.76, 24.76, 24.76, 24.76, 24.76, 28.33, 28.33, 28.33, 28.33, 28.33, 28.33, 28.33, 28.33, 28.33, 28.33, 28.33, 28.33, 32.86, 32.86, 32.86, 32.86, 32.86, 32.86, 32.86, 32.86, 32.86, 32.86, 32.86, 32.86, 40.57, 40.57, 40.57, 40.57, 40.57, 40.57, 40.57, 40.57, 40.57, 40.57, 40.57, 40.57, 43.77, 43.77, 43.77, 43.77, 43.77, 43.77, 43.77, 43.77, 43.77, 43.77, 43.77, 43.77, 36.98, 36.98, 36.98, 36.98, 36.98, 36.98, 36.98, 36.98, 36.98, 36.98, 36.98, 36.98, 30.28, 30.28, 30.28, 30.28, 30.28, 30.28, 30.28, 30.28, 30.28, 30.28, 30.28, 30.28, 22.9, 22.9, 22.9, 22.9, 22.9, 22.9, 22.9, 22.9, 22.9, 22.9, 22.9, 22.9, 27.66, 27.66, 27.66, 27.66, 27.66, 27.66, 27.66, 27.66, 27.66, 27.66, 27.66, 27.66, 26.59, 26.59, 26.59, 26.59, 26.59, 26.59, 26.59, 26.59, 26.59, 26.59, 26.59, 26.59, 26.47, 26.47, 26.47, 26.47, 26.47, 26.47, 26.47, 26.47, 26.47, 26.47, 26.47, 26.47, 27.21, 27.21, 27.21, 27.21, 27.21, 27.21, 27.21, 27.21, 27.21, 27.21, 27.21, 27.21, 24.02, 24.02, 24.02, 24.02, 24.02, 24.02, 24.02, 24.02, 24.02, 24.02, 24.02, 24.02, 15.17, 15.17, 15.17, 15.17, 15.17, 15.17, 15.17, 15.17, 15.17, 15.17, 15.17, 15.17, 20.53, 20.53, 20.53, 20.53, 20.53, 20.53, 20.53, 20.53, 20.53, 20.53, 20.53, 20.53, 22.98, 22.98, 22.98, 22.98, 22.98, 22.98, 22.98, 22.98, 22.98, 22.98, 22.98, 22.98, 21.21, 21.21, 21.21, 21.21, 21.21, 21.21, 21.21, 21.21, 21.21, 21.21, 21.21, 21.21, 21.9, 21.9, 21.9, 21.9, 21.9, 21.9, 21.9, 21.9, 21.9, 21.9, 21.9, 21.9, 24.86, 24.86, 24.86, 24.86, 24.86, 24.86, 24.86, 24.86, 24.86, 24.86, 24.86, 24.86, 26.49, 26.49, 26.49, 26.49, 26.49, 26.49, 26.49, 26.49, 26.49, 26.49, 26.49, 26.49, 24.21, 24.21, 24.21, 24.21, 24.21, 24.21, 24.21, 24.21, 24.21, 24.21, 24.21, 24.21, 28.06, 28.06, 28.06, 28.06, 28.06, 28.06, 28.06, 28.06, 28.06, 28.06, 28.06, 28.06, 33.31, 33.31, 33.31, 33.31, 33.31, 33.31, 33.31, 33.31, 33.31, 33.31, 33.31, 33.31, 28.38, 28.38, 28.38, 28.38, 28.38, 28.38, 28.38, 28.38, 28.38, 28.38, 28.38, 28.38, 30.99, 30.99, 30.99, 30.99, 30.99, 30.99, 30.99, 30.99, 30.99, 30.99, 30.99, 30.99, 34.51, 34.51, 34.51, 34.51, 34.51, 34.51, 34.51, 34.51, 34.51, 34.51, 34.51, 34.51, 36.94, 36.94, 36.94, 36.94, 36.94, 36.94, 36.94, 36.94, 36.94, 36.94, 36.94, 36.94, 28.34, 28.34, 28.34, 28.34, 28.34, 28.34, 28.34, 28.34, 28.34, 28.34, 28.34, 28.34, 31.97, 31.97, 31.97, 31.97, 31.97, 31.97, 31.97, 31.97, 31.97, 31.97, 31.97, 31.97, 37.14, 37.14, 37.14, 37.14, 37.14, 37.14, 37.14, 37.14, 37.14, 37.14, 37.14, 37.14, 40.03, 40.03, 40.03, 40.03, 40.03, 40.03, 40.03];var ddV = [0.0, 0.0, 0.0, -2.57, 0.0, 0.0, -0.48, 0.0, -0.73, 0.0, -1.03, 0.0, 0.0, -2.91, -7.0, -5.93, -4.46, -6.63, -3.61, 0.0, -2.51, 0.0, -3.97, -3.27, -0.04, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.29, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -4.5, -2.65, 0.0, 0.0, 0.0, -2.39, 0.0, 0.0, -4.42, 0.0, 0.0, 0.0, 0.0, -5.18, -0.62, -3.06, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -2.08, 0.0, -1.35, -15.28, -9.89, -2.58, 0.0, 0.0, 0.0, -3.21, 0.0, 0.0, -2.29, 0.0, -3.09, -3.6, -5.75, 0.0, 0.0, 0.0, -4.98, -6.42, 0.0, -3.51, -5.03, -3.17, -4.69, 0.0, -5.48, -5.93, -12.96, -13.41, -9.56, -18.18, -22.77, -16.17, -16.64, -18.63, -19.46, -24.24, -30.42, -29.51, -24.02, -23.59, -24.34, -25.7, -23.23, -27.69, -28.11, -33.42, -38.67, -38.26, -44.73, -40.18, -36.48, -40.08, -41.55, -42.34, -42.22, -37.33, -33.9, -33.19, -31.98, -30.58, -31.35, -27.67, -26.87, -23.19, -21.68, -20.62, -21.67, -23.15, -21.83, -20.39, -22.95, -22.77, -21.98, -20.98, -17.47, -14.98, -16.89, -15.15, -16.7, -18.26, -15.63, -15.5, -12.27, -13.09, -12.39, -14.47, -10.71, -10.87, -8.74, -8.21, -6.7, -5.51, -8.36, -8.13, -7.71, -5.7, -3.16, -0.1, 0.0, 0.0, 0.0, -1.96, -0.83, 0.0, 0.0, -1.46, -4.54, -3.32, 0.0, 0.0, -3.87, -4.96, -10.71, -13.01, -13.79, -9.67, -8.31, -15.97, -16.73, -15.44, -23.41, -36.06, -40.51, -39.93, -44.86, -50.78, -46.68, -41.39, -37.96, -38.0, -33.38, -30.91, -28.47, -29.84, -25.52, -24.09, -26.85, -24.57, -19.98, -18.75, -25.2, -29.07, -24.22, -27.64, -21.16, -18.14, -18.14, -12.67, -10.63, -7.53, -7.52, -4.84, -5.9, -7.49, -9.35, -14.33, -20.28, -11.57, -11.94, -11.02, -6.89, -2.85, 0.0, -0.67, -6.63, -2.85, -1.69, 0.0, 0.0, -1.82, -1.27, -0.39, 0.0, 0.0, 0.0, 0.0, 0.0, -1.33, 0.0, -3.0, 0.0, 0.0, 0.0, 0.0, -3.52, 0.0, 0.0, 0.0, 0.0, 0.0, -1.34, 0.0, -1.38, 0.0, 0.0, -0.25, -3.21, 0.0, -1.57, -0.6, 0.0, -2.03, 0.0, -6.1, -8.49, -0.71, -0.34, -2.07, -6.94, -7.02, -0.76, -0.37, 0.0, 0.0, 0.0, 0.0, 0.0, -1.73, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -3.64, -6.28, -5.79, -3.5, -2.95, 0.0, 0.0, 0.0, -6.91, -5.18, -13.53, -6.61, -3.58, -1.84, 0.0, -6.37, 0.0, 0.0, -1.68, 0.0, 0.0, 0.0, 0.0, -0.04, -7.95, -19.45, -9.22, -4.89, -3.21, 0.0, 0.0, -3.74, -6.14, 0.0, 0.0, -1.02, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -4.66, 0.0, -0.8, 0.0, -5.27, -8.07, -4.61, -12.99, -12.79, -19.98, -12.61, -16.18, -23.93, -17.74, -13.17, -18.18, -13.03, -15.22, -12.07, -10.67, -10.26, -4.44, -1.31, -2.92, -7.52, -9.53, -1.26, 0.0, 0.0, 0.0, 0.0, -4.03, 0.0, 0.0, 0.0, 0.0, 0.0, -0.89, 0.0, -2.41, 0.0, -1.27, -6.77, -7.58, -1.77, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.86, -5.76, 0.0, 0.0, -1.03, -0.43];var cumBH = [100.0, 101.08, 103.36, 100.71, 103.4, 103.77, 103.28, 107.26, 106.47, 108.54, 107.42, 108.71, 112.53, 109.25, 104.65, 105.85, 107.51, 105.06, 108.46, 112.57, 109.75, 112.86, 108.38, 109.17, 112.82, 117.42, 120.7, 124.26, 129.2, 131.81, 136.04, 136.67, 142.47, 142.06, 148.36, 150.69, 156.04, 156.53, 159.23, 160.97, 164.62, 166.07, 158.61, 161.68, 170.72, 176.23, 189.09, 184.57, 195.98, 197.89, 189.13, 201.0, 213.69, 222.48, 240.11, 227.67, 238.62, 232.77, 241.77, 246.37, 249.57, 266.86, 279.88, 283.45, 277.56, 289.38, 285.48, 245.17, 260.76, 281.92, 297.6, 317.09, 328.25, 317.71, 330.9, 343.47, 335.59, 354.17, 343.22, 341.44, 333.8, 355.21, 361.1, 381.71, 362.71, 357.2, 391.83, 378.06, 372.13, 379.43, 373.46, 397.89, 376.07, 374.29, 346.33, 344.55, 359.85, 325.55, 307.3, 333.56, 331.69, 323.77, 320.45, 301.45, 276.86, 280.47, 302.32, 304.02, 301.04, 295.65, 305.48, 287.72, 286.02, 264.91, 244.01, 245.67, 219.91, 238.03, 252.72, 238.41, 232.56, 229.41, 229.91, 249.36, 263.0, 265.82, 270.64, 276.19, 273.17, 287.81, 290.96, 305.6, 311.62, 315.85, 311.66, 305.77, 311.03, 316.76, 306.55, 307.3, 310.41, 314.39, 328.37, 338.28, 330.69, 337.62, 331.44, 325.22, 335.71, 336.21, 349.07, 345.79, 348.57, 340.32, 355.29, 354.63, 363.13, 365.2, 371.22, 375.95, 364.62, 365.53, 367.19, 375.2, 385.32, 397.47, 405.39, 410.79, 416.97, 408.8, 413.52, 431.86, 446.5, 439.99, 426.22, 431.69, 448.36, 454.46, 436.87, 431.94, 405.81, 395.36, 391.79, 410.5, 416.68, 381.88, 378.43, 384.28, 348.07, 290.59, 270.35, 273.0, 250.6, 223.68, 242.31, 266.36, 281.96, 281.75, 302.78, 313.98, 325.09, 318.83, 338.49, 344.96, 332.44, 342.81, 363.67, 369.27, 339.94, 322.36, 344.38, 328.87, 358.32, 372.01, 372.01, 396.89, 406.14, 420.24, 420.28, 432.48, 427.63, 420.41, 411.99, 389.34, 362.3, 401.87, 400.21, 404.4, 423.15, 441.52, 455.75, 452.68, 425.51, 442.76, 448.03, 459.23, 470.89, 462.3, 464.91, 469.06, 493.08, 499.38, 518.33, 528.29, 540.77, 533.56, 561.14, 544.3, 561.51, 587.52, 604.94, 620.62, 598.76, 626.01, 631.19, 635.59, 650.31, 663.75, 654.83, 680.67, 671.3, 687.1, 705.98, 704.19, 683.33, 721.74, 710.37, 717.38, 726.59, 711.82, 727.92, 683.54, 666.12, 722.77, 725.43, 712.86, 677.4, 676.82, 722.36, 725.22, 737.54, 740.11, 767.11, 768.03, 768.07, 754.75, 782.54, 798.43, 812.7, 844.63, 845.67, 854.09, 866.12, 871.63, 889.55, 892.16, 910.12, 931.57, 960.06, 971.72, 1026.47, 989.14, 962.05, 966.99, 990.51, 996.23, 1033.1, 1066.08, 1072.42, 998.3, 1016.84, 927.29, 1001.54, 1034.01, 1052.72, 1095.73, 1025.88, 1097.27, 1113.86, 1095.19, 1116.51, 1141.19, 1182.5, 1216.84, 1216.34, 1120.08, 980.22, 1104.69, 1157.28, 1177.81, 1247.2, 1334.22, 1284.28, 1252.26, 1388.47, 1439.9, 1425.26, 1464.87, 1531.36, 1612.41, 1622.98, 1659.4, 1699.88, 1750.48, 1668.9, 1785.98, 1771.63, 1853.59, 1755.83, 1703.99, 1768.07, 1612.86, 1616.51, 1483.2, 1619.79, 1553.71, 1410.08, 1524.68, 1609.46, 1516.68, 1612.07, 1571.55, 1629.82, 1655.83, 1663.5, 1771.3, 1829.24, 1799.55, 1714.19, 1676.94, 1830.16, 1913.69, 1944.17, 2045.63, 2112.53, 2027.34, 2129.91, 2205.02, 2231.73, 2283.87, 2331.86, 2311.03, 2448.86, 2389.97, 2454.13, 2422.98, 2287.97, 2268.15, 2410.66, 2534.56, 2592.91, 2646.13, 2740.4, 2805.73, 2811.16, 2813.44, 2854.88, 2830.2, 2690.47, 2973.09, 3129.58, 3097.35, 3116.06];var cumST = [100.0, 102.59, 108.14, 101.48, 108.0, 108.94, 107.68, 117.64, 115.57, 120.97, 117.98, 121.37, 131.59, 122.39, 117.24, 120.47, 125.0, 118.17, 127.36, 138.93, 130.57, 139.46, 126.17, 128.37, 138.67, 152.26, 162.45, 173.98, 190.56, 199.81, 215.2, 217.56, 239.75, 238.07, 263.43, 273.33, 296.62, 298.89, 311.25, 319.42, 336.8, 343.93, 306.82, 321.07, 364.17, 392.41, 461.12, 450.1, 477.91, 482.56, 461.22, 490.15, 521.1, 542.54, 585.53, 555.19, 581.89, 581.89, 593.14, 604.43, 608.35, 629.43, 644.79, 648.9, 642.16, 655.83, 651.41, 651.41, 651.41, 677.84, 696.68, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 719.5, 715.97, 709.56, 721.35, 700.39, 698.32, 672.55, 672.55, 672.55, 672.55, 672.55, 693.3, 673.67, 673.67, 669.1, 669.83, 726.5, 766.26, 774.48, 788.5, 804.69, 795.87, 838.52, 847.71, 890.37, 907.89, 920.21, 908.01, 890.85, 906.2, 922.87, 893.14, 895.32, 904.38, 915.98, 956.71, 985.59, 963.47, 983.65, 965.65, 947.52, 978.1, 979.55, 1017.01, 1007.46, 1015.56, 991.51, 1035.13, 1033.2, 1057.97, 1064.01, 1081.54, 1095.31, 1062.32, 1064.98, 1069.82, 1093.14, 1122.62, 1158.03, 1181.11, 1196.82, 1214.83, 1191.02, 1204.8, 1258.21, 1300.87, 1281.89, 1241.77, 1257.73, 1306.3, 1324.07, 1272.83, 1258.45, 1220.38, 1204.67, 1199.23, 1256.49, 1301.89, 1193.16, 1182.41, 1200.68, 1200.68, 1200.68, 1200.68, 1200.68, 1200.68, 1200.68, 1200.68, 1200.68, 1235.83, 1235.37, 1281.47, 1305.17, 1328.28, 1328.28, 1410.18, 1437.14, 1384.95, 1428.15, 1515.07, 1538.4, 1538.4, 1538.4, 1643.5, 1606.49, 1750.34, 1817.2, 1817.2, 1938.77, 1983.95, 2149.28, 2149.79, 2299.49, 2237.56, 2146.93, 2125.43, 2125.43, 2125.43, 2241.49, 2236.87, 2260.28, 2511.76, 2773.53, 2988.01, 2939.71, 2763.29, 3032.21, 3118.79, 3305.88, 3507.24, 3353.77, 3399.26, 3472.04, 3898.67, 4018.3, 4384.36, 4586.44, 4846.57, 4691.33, 5273.38, 4893.57, 5264.98, 5850.2, 6266.51, 6656.3, 6093.65, 6759.24, 6893.59, 7008.83, 7398.5, 7765.44, 7515.05, 8226.76, 7954.86, 8404.28, 8958.27, 8903.97, 8640.17, 9125.8, 8982.11, 9070.73, 9187.15, 9000.45, 9203.94, 8923.36, 8695.95, 9435.59, 9470.25, 9306.19, 8843.23, 8835.65, 10262.53, 10360.12, 10782.46, 10872.7, 11824.7, 11858.47, 11860.01, 11366.61, 12371.04, 12973.75, 13205.59, 13724.55, 13741.4, 13878.21, 14073.66, 14163.29, 14454.45, 14496.9, 14788.72, 15137.16, 15600.17, 15789.56, 16234.37, 15939.18, 15720.96, 15761.28, 15952.94, 15999.03, 16295.1, 16555.14, 16604.43, 16030.63, 16179.49, 15467.07, 16705.43, 17247.12, 17559.13, 18276.55, 17111.53, 18302.15, 18578.88, 18267.55, 18623.15, 19034.77, 19723.83, 20296.65, 20292.51, 20292.51, 20292.51, 20292.51, 20775.55, 20775.55, 21387.54, 22133.67, 21719.43, 21719.43, 22900.67, 23324.79, 23324.79, 23648.91, 24185.6, 24825.6, 24907.02, 25186.46, 25493.66, 25873.1, 25270.16, 26156.63, 26051.56, 26654.16, 26654.16, 26654.16, 26654.16, 26654.16, 26654.16, 26654.16, 26654.16, 26654.16, 26654.16, 26654.16, 26654.16, 26654.16, 28330.65, 27618.51, 28642.63, 29099.65, 29234.5, 31128.95, 32147.24, 31625.33, 30125.22, 29470.66, 32163.27, 33631.3, 33899.17, 34783.64, 35352.45, 34639.61, 35515.88, 36142.14, 36361.05, 36785.78, 37172.25, 37006.28, 38109.77, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46, 37651.46];var pos = ["L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L3-100%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L5-100%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L3-100%QQQ", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L3-100%QQQ", "L2-70%TQQQ+30%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L3-100%QQQ", "L4-50%QQQ+50%\u73b0\u91d1", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L4-50%QQQ+50%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L3-100%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L3-100%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L4-50%QQQ+50%\u73b0\u91d1", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L2-70%TQQQ+30%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L4-50%QQQ+50%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L3-100%QQQ", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L4-50%QQQ+50%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1", "L5-100%\u73b0\u91d1"];var ev = {"1998-08": {"name": "\u4e9a\u6d32\u91d1\u878d\u5371\u673a/LTCM", "cape": 32.86, "vix": 44.28, "dd": -15.28, "position": "L5-100%\u73b0\u91d1"}, "2000-03": {"name": "\u4e92\u8054\u7f51\u6ce1\u6cab\u9876\u90e8", "cape": 43.77, "vix": 24.11, "dd": 0.0, "position": "L5-100%\u73b0\u91d1"}, "2002-10": {"name": "\u4e92\u8054\u7f51\u6ce1\u6cab\u5e95\u90e8", "cape": 30.28, "vix": 31.14, "dd": -40.18, "position": "L5-100%\u73b0\u91d1"}, "2003-03": {"name": "\u4f0a\u62c9\u514b\u6218\u4e89", "cape": 22.9, "vix": 29.15, "dd": -42.22, "position": "L4-50%QQQ+50%\u73b0\u91d1"}, "2007-10": {"name": "\u6b21\u8d37\u5371\u673a\u9876\u90e8", "cape": 27.21, "vix": 18.53, "dd": 0.0, "position": "L3-100%QQQ"}, "2008-09": {"name": "\u96f7\u66fc\u7834\u4ea7/\u91d1\u878d\u6d77\u5578", "cape": 24.02, "vix": 39.39, "dd": -23.41, "position": "L5-100%\u73b0\u91d1"}, "2009-03": {"name": "\u5168\u7403\u91d1\u878d\u5371\u673a\u5e95\u90e8", "cape": 15.17, "vix": 44.14, "dd": -46.68, "position": "L5-100%\u73b0\u91d1"}, "2010-05": {"name": "\u6b27\u503a\u5371\u673a\u95ea\u5d29", "cape": 20.53, "vix": 32.07, "dd": -25.2, "position": "L5-100%\u73b0\u91d1"}, "2011-08": {"name": "\u7f8e\u56fd\u964d\u7ea7+\u6b27\u503a", "cape": 22.98, "vix": 31.62, "dd": -14.33, "position": "L5-100%\u73b0\u91d1"}, "2015-08": {"name": "\u4e2d\u56fd\u80a1\u707e\u6ce2\u53ca", "cape": 26.49, "vix": 28.43, "dd": -6.1, "position": "L4-50%QQQ+50%\u73b0\u91d1"}, "2018-02": {"name": "VIX\u98ce\u66b4", "cape": 33.31, "vix": 19.85, "dd": -3.64, "position": "L4-50%QQQ+50%\u73b0\u91d1"}, "2018-12": {"name": "\u7f8e\u8054\u50a8\u52a0\u606f\u6050\u614c", "cape": 33.31, "vix": 25.42, "dd": -13.53, "position": "L4-50%QQQ+50%\u73b0\u91d1"}, "2020-03": {"name": "COVID\u5d29\u76d8", "cape": 30.99, "vix": 53.54, "dd": -19.45, "position": "L5-100%\u73b0\u91d1"}, "2020-08": {"name": "COVID\u53cd\u5f39\u9ad8\u70b9", "cape": 30.99, "vix": 26.41, "dd": 0.0, "position": "L4-50%QQQ+50%\u73b0\u91d1"}, "2021-11": {"name": "\u901a\u80c0\u9876\u90e8", "cape": 34.51, "vix": 27.19, "dd": -0.8, "position": "L4-50%QQQ+50%\u73b0\u91d1"}, "2022-06": {"name": "\u52a0\u606f\u718a\u5e02\u5e95\u90e8", "cape": 36.94, "vix": 28.71, "dd": -19.98, "position": "L5-100%\u73b0\u91d1"}, "2022-10": {"name": "\u52a0\u606f\u718a\u5e02\u771f\u5e95\u90e8", "cape": 36.94, "vix": 25.88, "dd": -17.74, "position": "L5-100%\u73b0\u91d1"}, "2024-12": {"name": "AI\u70ed\u6f6e\u9ad8\u4f4d", "cape": 31.97, "vix": 17.35, "dd": -2.41, "position": "L4-50%QQQ+50%\u73b0\u91d1"}};var totalM = 403;
+var annotations = [];
+Object.keys(ev).forEach(function(d) {
+  var e = ev[d];
+  annotations.push({
+    type: 'line',
+    xMin: d, xMax: d,
+    borderColor: '#94a3b8',
+    borderWidth: 1,
+    borderDash: [4,4],
+    label: {
+      display: true,
+      content: e.name.length > 10 ? e.name.substring(0,10) : e.name,
+      position: 'start',
+      backgroundColor: 'rgba(148,163,184,0.85)',
+      color: '#fff',
+      font: { size: 9, weight: 'bold' },
+      padding: 2,
+      rotation: 0,
+    }
+  });
+});
+
+// CAPE threshold bands
+var capeBands = [
+  { yMin: 0, yMax: 20, color: 'rgba(34,197,94,0.08)', label: '便宜<20' },
+  { yMin: 20, yMax: 25, color: 'rgba(202,138,4,0.06)', label: '合理20-25' },
+  { yMin: 25, yMax: 30, color: 'rgba(249,115,22,0.06)', label: '偏贵25-30' },
+  { yMin: 30, yMax: 50, color: 'rgba(239,68,68,0.06)', label: '昂贵30+' },
+];
+
+var capeAnnotations = [];
+capeBands.forEach(function(b) {
+  capeAnnotations.push({
+    type: 'box',
+    yMin: b.yMin, yMax: b.yMax,
+    backgroundColor: b.color,
+    borderWidth: 0,
+    label: {
+      display: true,
+      content: b.label,
+      position: { x: 'center', y: 'end' },
+      color: '#6b7280',
+      font: { size: 9 },
+      padding: 2,
+    }
+  });
+});
+
+// VIX threshold bands
+var vixBands = [
+  { yMin: 0, yMax: 15, color: 'rgba(34,197,94,0.08)', label: '平静<15' },
+  { yMin: 15, yMax: 20, color: 'rgba(37,99,235,0.05)', label: '温和15-20' },
+  { yMin: 20, yMax: 25, color: 'rgba(202,138,4,0.06)', label: '不安20-25' },
+  { yMin: 25, yMax: 30, color: 'rgba(249,115,22,0.06)', label: '恐慌25-30' },
+  { yMin: 30, yMax: 60, color: 'rgba(239,68,68,0.08)', label: '极度恐慌30+' },
+];
+
+var vixAnnotations = [];
+vixBands.forEach(function(b) {
+  vixAnnotations.push({
+    type: 'box',
+    yMin: b.yMin, yMax: b.yMax,
+    backgroundColor: b.color,
+    borderWidth: 0,
+    label: {
+      display: true,
+      content: b.label,
+      position: { x: 'center', y: 'end' },
+      color: '#6b7280',
+      font: { size: 9 },
+      padding: 2,
+    }
+  });
+});
+
+// DD threshold lines
+var ddAnnotations = [
+  { type: 'line', yMin: -5, yMax: -5, borderColor: '#22c55e', borderWidth: 1, borderDash: [3,3], label: { display:true, content:'DD-5%', font:{size:9}, color:'#22c55e', position:'end' } },
+  { type: 'line', yMin: -10, yMax: -10, borderColor: '#eab308', borderWidth: 1, borderDash: [3,3], label: { display:true, content:'DD-10%', font:{size:9}, color:'#eab308', position:'end' } },
+  { type: 'line', yMin: -20, yMax: -20, borderColor: '#ef4444', borderWidth: 1, borderDash: [3,3], label: { display:true, content:'DD-20%', font:{size:9}, color:'#ef4444', position:'end' } },
+];
+
+// ===== Chart 1: SPY + DD =====
+var ctx1 = document.getElementById('chartSPY').getContext('2d');
+var chart1 = new Chart(ctx1, {
+  type: 'line',
+  data: {
+    labels: dates,
+    datasets: [
+      {
+        label: 'SPY',
+        data: spyP,
+        yAxisID: 'ySPY',
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37,99,235,0.04)',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.3,
+      },
+      {
+        label: '回撤DD %',
+        data: ddV,
+        yAxisID: 'yDD',
+        borderColor: '#7c3aed',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: {
+          target: 'yDD',
+          above: 'rgba(124,58,237,0)',
+          below: 'rgba(124,58,237,0.25)',
+        },
+        tension: 0.3,
+      },
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position:'top', labels:{font:{size:11},usePointStyle:true,pointStyle:'line'} },
+      tooltip: {
+        callbacks: {
+          afterBody: function(items) {
+            var idx = items[0].dataIndex;
+            var p = pos[idx];
+            var e = ev[dates[idx]] || '';
+            var lines = ['仓位: '+p];
+            if (e) lines.push('⚡ '+e);
+            return lines;
+          }
+        }
+      },
+      annotation: { annotations: annotations.concat(ddAnnotations) },
+    },
+    scales: {
+      ySPY: {
+        type:'linear', position:'left',
+        title:{display:true,text:'SPY $',font:{size:11}},
+        grid:{color:'#f0f1f3'},
+      },
+      yDD: {
+        type:'linear', position:'right',
+        title:{display:true,text:'回撤 DD %',font:{size:11}},
+        min:-50, max:5,
+        grid:{drawOnChartArea:false},
+      },
+      x: { grid:{color:'#f5f5f5'}, ticks:{font:{size:10},maxTicksLimit:15} }
+    }
+  }
+});
+
+// ===== Chart 2: CAPE + VIX =====
+var ctx2 = document.getElementById('chartCV').getContext('2d');
+var chart2 = new Chart(ctx2, {
+  type: 'line',
+  data: {
+    labels: dates,
+    datasets: [
+      {
+        label: 'CAPE',
+        data: capeV,
+        yAxisID: 'yCAPE',
+        borderColor: '#f97316',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0.3,
+      },
+      {
+        label: 'VIX',
+        data: vixV,
+        yAxisID: 'yVIX',
+        borderColor: '#ef4444',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: {
+          target: 'yVIX',
+          above: 'rgba(239,68,68,0.15)',
+          below: 'rgba(239,68,68,0)',
+        },
+        tension: 0.3,
+      },
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position:'top', labels:{font:{size:11},usePointStyle:true,pointStyle:'line'} },
+      tooltip: {
+        callbacks: {
+          afterBody: function(items) {
+            var idx = items[0].dataIndex;
+            var p = pos[idx];
+            var e = ev[dates[idx]] || '';
+            var lines = ['仓位: '+p];
+            if (e) lines.push('⚡ '+e);
+            return lines;
+          }
+        }
+      },
+      annotation: { annotations: annotations.concat(capeAnnotations).concat(vixAnnotations) },
+    },
+    scales: {
+      yCAPE: {
+        type:'linear', position:'left',
+        title:{display:true,text:'CAPE',font:{size:11}},
+        min:10, max:50,
+        grid:{color:'#f0f1f3'},
+      },
+      yVIX: {
+        type:'linear', position:'right',
+        title:{display:true,text:'VIX',font:{size:11}},
+        min:0, max:60,
+        grid:{drawOnChartArea:false},
+      },
+      x: { grid:{color:'#f5f5f5'}, ticks:{font:{size:10},maxTicksLimit:15} }
+    }
+  }
+});
+
+// ===== Chart 3: Backtest =====
+var ctx3 = document.getElementById('chartBT').getContext('2d');
+var chart3 = new Chart(ctx3, {
+  type: 'line',
+  data: {
+    labels: dates,
+    datasets: [
+      {
+        label: 'L1-L5策略',
+        data: cumST,
+        borderColor: '#16a34a',
+        backgroundColor: 'rgba(22,163,74,0.06)',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.3,
+      },
+      {
+        label: 'SPY买入持有',
+        data: cumBH,
+        borderColor: '#2563eb',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: false,
+        tension: 0.3,
+      },
+    ]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode:'index', intersect:false },
+    plugins: {
+      legend: { position:'top', labels:{font:{size:11},usePointStyle:true,pointStyle:'line'} },
+      tooltip: {
+        callbacks: {
+          afterBody: function(items) {
+            var idx = items[0].dataIndex;
+            return ['仓位: '+pos[idx]];
+          }
+        }
+      },
+      annotation: { annotations: annotations },
+    },
+    scales: {
+      y: { title:{display:true,text:'累计资金 ($)',font:{size:11}}, grid:{color:'#f0f1f3'} },
+      x: { grid:{color:'#f5f5f5'}, ticks:{font:{size:10},maxTicksLimit:15} }
+    }
+  }
+});
+
+// ===== Range selector =====
+function setRange(range, btn) {
+  document.querySelectorAll('.range-btns button').forEach(function(b){b.classList.remove('active')});
+  btn.classList.add('active');
+
+  var ranges = {
+    'all': [0, dates.length-1],
+    '1998-1999': [null,null],
+    '2000-2003': [null,null],
+    '2007-2010': [null,null],
+    '2018-2019': [null,null],
+    '2020-2021': [null,null],
+    '2022-2023': [null,null],
+    '2024-2026': [null,null],
+  };
+
+  // Find start/end indices for each range
+  var rangeParts = range.split('-');
+  if (range === 'all') {
+    chart1.options.scales.x.min = undefined;
+    chart1.options.scales.x.max = undefined;
+    chart2.options.scales.x.min = undefined;
+    chart2.options.scales.x.max = undefined;
+    chart3.options.scales.x.min = undefined;
+    chart3.options.scales.x.max = undefined;
+  } else {
+    var startYear = rangeParts[0];
+    var endYear = rangeParts[1];
+    chart1.options.scales.x.min = startYear + '-01';
+    chart1.options.scales.x.max = endYear + '-12';
+    chart2.options.scales.x.min = startYear + '-01';
+    chart2.options.scales.x.max = endYear + '-12';
+    chart3.options.scales.x.min = startYear + '-01';
+    chart3.options.scales.x.max = endYear + '-12';
+  }
+  chart1.update(); chart2.update(); chart3.update();
+}
+
+// ===== Tab switcher =====
+function switchTab(tabId, btn) {
+  document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});
+  document.querySelectorAll('.tab-content').forEach(function(c){c.classList.remove('active')});
+  btn.classList.add('active');
+  document.getElementById('tab-'+tabId).classList.add('active');
+}
+</script></body></html>
