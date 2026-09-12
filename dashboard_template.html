@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>美股三信号仪表盘</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f6fa;color:#333;min-height:100vh}
+
+.header{background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);padding:24px 32px 16px;color:#fff;text-align:center}
+.header h1{font-size:28px;font-weight:700;margin-bottom:4px;letter-spacing:2px}
+.header .subtitle{font-size:14px;color:#aab;margin-bottom:12px}
+
+.switch-bar{display:flex;justify-content:center;gap:0;margin:16px 0}
+.switch-btn{padding:10px 32px;font-size:16px;font-weight:600;border:2px solid #3a6ea5;background:transparent;color:#aab;cursor:pointer;transition:all .3s;outline:none}
+.switch-btn:first-child{border-radius:8px 0 0 8px}
+.switch-btn:last-child{border-radius:0 8px 8px 0}
+.switch-btn.active{background:#3a6ea5;color:#fff}
+.switch-btn:hover:not(.active){background:rgba(58,110,165,.2);color:#dde}
+
+.summary-section{display:flex;justify-content:center;padding:16px 32px}
+.summary-card{background:#fff;border-radius:12px;padding:20px 28px;max-width:860px;width:100%;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.summary-title{font-size:18px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.summary-title .date{font-size:13px;color:#888;font-weight:400}
+.indicators-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.indicator-item{padding:12px;border-radius:8px;background:#f8f9fc;border-left:4px solid #ccc;transition:transform .2s}
+.indicator-item:hover{transform:translateY(-2px)}
+.indicator-item.signal-normal{border-left-color:#4caf50}
+.indicator-item.signal-triggered{border-left-color:#f44336}
+.indicator-name{font-size:13px;color:#666;margin-bottom:4px}
+.indicator-value{font-size:22px;font-weight:700}
+.indicator-status{font-size:12px;margin-top:4px}
+.status-normal{color:#4caf50}
+.status-triggered{color:#f44336;font-weight:600}
+
+.position-box{margin-top:16px;padding:12px 16px;border-radius:8px;text-align:center}
+.position-box.level-1{background:linear-gradient(135deg,#e8f5e9,#c8e6c9)}
+.position-box.level-2{background:linear-gradient(135deg,#fff8e1,#ffecb3)}
+.position-box.level-3{background:linear-gradient(135deg,#ffe0b2,#ffcc80)}
+.position-box.level-4{background:linear-gradient(135deg,#ffebee,#ffcdd2)}
+.position-box.level-5{background:linear-gradient(135deg,#ffcdd2,#ef9a9a)}
+.position-label{font-size:14px;font-weight:600;color:#555}
+.position-value{font-size:20px;font-weight:700;margin-top:4px}
+.position-desc{font-size:12px;color:#777;margin-top:2px}
+
+.trend-alloc-row{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding:10px 16px;background:#f0f4ff;border-radius:8px;gap:16px;flex-wrap:wrap}
+.trend-score{font-size:14px;font-weight:600;color:#333}
+.trend-score .score-val{color:#1565c0}
+.trend-score .score-dir{margin-left:4px}
+.alloc-info{font-size:14px;font-weight:600}
+.alloc-info .alloc-current{color:#2e7d32}
+.alloc-info .alloc-arrow{color:#ff8f00;font-weight:700;margin:0 6px}
+.alloc-info .alloc-prev{color:#999;text-decoration:line-through;font-weight:400}
+
+.range-bar{display:flex;justify-content:center;gap:8px;padding:12px 32px;flex-wrap:wrap}
+.range-btn{padding:6px 16px;font-size:13px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#555;cursor:pointer;transition:all .2s}
+.range-btn:hover{background:#3a6ea5;color:#fff;border-color:#3a6ea5}
+.event-btn{padding:6px 12px;font-size:12px;border:1px solid #f0a0a0;border-radius:6px;background:#fff0f0;color:#c55;cursor:pointer;transition:all .2s}
+.event-btn:hover{background:#c55;color:#fff}
+
+.chart-section{padding:16px 32px 32px;display:flex;justify-content:center}
+.chart-container{background:#fff;border-radius:12px;padding:20px;max-width:1100px;width:100%;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+#main-chart{width:100%;height:520px}
+.legend-note{text-align:center;font-size:12px;color:#888;margin-top:8px}
+
+/* === 级别说明 === */
+.levels-section{display:flex;justify-content:center;padding:0 32px 24px}
+.levels-card{background:#fff;border-radius:12px;padding:24px 28px;max-width:1100px;width:100%;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.levels-title{font-size:16px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;color:#333}
+.levels-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.level-card{border-radius:8px;padding:14px 12px;text-align:center;transition:transform .2s;border:1px solid #e0e0e0}
+.level-card:hover{transform:translateY(-2px)}
+.level-card.l1{background:linear-gradient(135deg,#e8f5e9,#c8e6c9);border-color:#4caf50}
+.level-card.l2{background:linear-gradient(135deg,#fff8e1,#ffecb3);border-color:#ff9800}
+.level-card.l3{background:linear-gradient(135deg,#ffe0b2,#ffcc80);border-color:#f57c00}
+.level-card.l4{background:linear-gradient(135deg,#ffebee,#ffcdd2);border-color:#f44336}
+.level-card.l5{background:linear-gradient(135deg,#ffcdd2,#ef9a9a);border-color:#9c27b0}
+.level-num{font-size:22px;font-weight:700;margin-bottom:4px}
+.level-name{font-size:15px;font-weight:600;margin-bottom:6px}
+.level-trigger{font-size:12px;color:#666;margin-bottom:4px}
+.level-desc{font-size:12px;color:#888;line-height:1.4}
+.level-icon{font-size:24px;margin-bottom:4px}
+
+/* === 指标说明 === */
+.indicators-section{display:flex;justify-content:center;padding:0 32px 24px}
+.indicators-explain{background:#fff;border-radius:12px;padding:24px 28px;max-width:1100px;width:100%;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.indicators-explain-title{font-size:16px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;color:#333}
+.ind-explain-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.ind-explain-item{padding:14px;border-radius:8px;border:1px solid #e0e0e0;background:#f8f9fc}
+.ind-explain-name{font-size:15px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.ind-explain-desc{font-size:12px;color:#666;line-height:1.5;margin-bottom:6px}
+.ind-explain-threshold{font-size:11px;color:#888;padding:4px 8px;background:#eee;border-radius:4px;display:inline-block}
+
+/* === 历史极值与关键时刻 === */
+.milestones-section{display:flex;justify-content:center;padding:0 32px 24px}
+.milestones-card{background:#fff;border-radius:12px;padding:24px 28px;max-width:1100px;width:100%;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.milestones-title{font-size:16px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;color:#333}
+.extremes-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
+.extreme-card{padding:14px;border-radius:8px;border:1px solid #e0e0e0;background:#f8f9fc}
+.extreme-name{font-size:14px;font-weight:600;margin-bottom:10px}
+.extreme-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px}
+.extreme-label{color:#888;min-width:70px}
+.extreme-val{font-weight:600}
+.extreme-val.danger{color:#f44336}
+.extreme-val.safe{color:#4caf50}
+.extreme-val .date-tag{font-size:11px;color:#999;margin-left:4px}
+.events-title{font-size:15px;font-weight:700;margin-bottom:12px;color:#333;border-top:1px solid #eee;padding-top:16px}
+.events-table{width:100%;overflow-x:auto}
+.events-row{display:grid;grid-template-columns:130px 70px 70px 70px 70px 70px 70px;gap:4px;padding:8px 6px;border-radius:6px;font-size:12px;align-items:center;border-bottom:1px solid #f0f0f0}
+.events-row:hover{background:#f5f7fa}
+.events-row.header{font-weight:700;color:#555;background:#f0f2f5;border-bottom:2px solid #ddd}
+.events-row .event-label{font-weight:600;color:#333;white-space:nowrap}
+.events-row .event-val{font-weight:500}
+.events-row .event-val.red{color:#f44336}
+.events-row .event-val.green{color:#4caf50}
+.events-row .event-val.orange{color:#ff9800}
+.events-row .event-date{font-size:11px;color:#888}
+
+/* === 25级趋势评分速查表 === */
+.trend-section{display:flex;justify-content:center;padding:0 32px 24px}
+.trend-card{background:#fff;border-radius:12px;padding:24px 28px;max-width:1100px;width:100%;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.trend-title{font-size:16px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:8px;color:#333}
+.trend-subtitle{font-size:12px;color:#888;margin-bottom:16px;line-height:1.5}
+.trend-table-wrap{overflow-x:auto;border-radius:8px;border:1px solid #e8e8e8}
+.trend-table{width:100%;border-collapse:collapse;font-size:13px}
+.trend-table th{background:#f0f2f5;padding:10px 12px;text-align:center;font-weight:700;color:#555;border-bottom:2px solid #ddd;white-space:nowrap}
+.trend-table td{padding:8px 12px;text-align:center;border-bottom:1px solid #f0f0f0;white-space:nowrap}
+.trend-table tr:hover{background:#f5f7fa}
+.trend-table tr.trend-safe{background:#f1f8f4}
+.trend-table tr.trend-safe:hover{background:#e8f5e9}
+.trend-table tr.trend-mild{background:#fefcf5}
+.trend-table tr.trend-mild:hover{background:#fff8e1}
+.trend-table tr.trend-mid{background:#fff8f0}
+.trend-table tr.trend-mid:hover{background:#ffe0b2}
+.trend-table tr.trend-warn{background:#fff5f5}
+.trend-table tr.trend-warn:hover{background:#ffebee}
+.trend-table tr.trend-danger{background:#fff0f0}
+.trend-table tr.trend-danger:hover{background:#ffcdd2}
+.td-step{font-weight:700;color:#333}
+.td-score{color:#666;font-size:12px}
+.td-tqqq{color:#e91e63;font-weight:600}
+.td-qqq{color:#1976d2;font-weight:500}
+.td-cash{color:#388e3c;font-weight:500}
+.td-meaning{color:#555;font-size:12px}
+.trend-legend{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;justify-content:center;font-size:12px}
+.trend-legend-item{display:flex;align-items:center;gap:4px}
+.trend-legend-dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+.trend-legend-dot.safe{background:#c8e6c9}
+.trend-legend-dot.mild{background:#ffecb3}
+.trend-legend-dot.mid{background:#ffcc80}
+.trend-legend-dot.warn{background:#ffcdd2}
+.trend-legend-dot.danger{background:#ef9a9a}
+
+.footer{text-align:center;padding:16px;font-size:12px;color:#999}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>美股三信号仪表盘</h1>
+  <div class="subtitle">价格 + 回撤 + 恐慌指数 + 估值 | 所有指标归一化同图对比 | 日度数据 | 顶部=危险区 底部=安全区</div>
+</div>
+
+<div class="switch-bar">
+  <button class="switch-btn active" id="btn-spy" onclick="switchView('spy')">标普500 (SPY)</button>
+  <button class="switch-btn" id="btn-qqq" onclick="switchView('qqq')">纳斯达克100 (QQQ)</button>
+</div>
+
+<div class="summary-section">
+  <div class="summary-card" id="summary-card">
+    <div style="text-align:center;padding:20px;color:#888">数据加载中...</div>
+  </div>
+</div>
+
+<div class="range-bar">
+  <button class="range-btn" onclick="setRange('3m')">3月</button>
+  <button class="range-btn" onclick="setRange('6m')">6月</button>
+  <button class="range-btn" onclick="setRange('1y')">1年</button>
+  <button class="range-btn" onclick="setRange('3y')">3年</button>
+  <button class="range-btn" onclick="setRange('5y')">5年</button>
+  <button class="range-btn" onclick="setRange('10y')">10年</button>
+  <button class="range-btn" onclick="setRange('all')">全部</button>
+  <span style="color:#999;font-size:13px;padding:6px 4px">|</span>
+  <button class="event-btn" onclick="setRange('dotcom')">互联网泡沫</button>
+  <button class="event-btn" onclick="setRange('financial')">金融海啸</button>
+  <button class="event-btn" onclick="setRange('covid')">COVID</button>
+  <button class="event-btn" onclick="setRange('2022bear')">2022熊市</button>
+</div>
+
+<div class="chart-section">
+  <div class="chart-container">
+    <div id="main-chart"></div>
+    <div class="legend-note">
+      图表上方 = 危险区（高CAPE / 高VIX / 大回撤） | 图表下方 = 安全区 | 鼠标悬停查看真实数值 | 拖动底部滑块或框选缩放时间
+    </div>
+  </div>
+</div>
+
+<!-- === 五级仓位说明 === -->
+<div class="levels-section">
+  <div class="levels-card">
+    <div class="levels-title">五级仓位策略说明（QQQ/TQQQ 调仓方案）</div>
+    <div class="levels-grid">
+      <div class="level-card l1">
+        <div class="level-icon">🚀</div>
+        <div class="level-num">L1</div>
+        <div class="level-name">满仓进攻</div>
+        <div class="level-trigger">0/3 信号触发</div>
+        <div class="level-desc">所有信号正常，市场处于乐观状态，可以全力进攻。适合牛市初期或中期。</div>
+      </div>
+      <div class="level-card l2">
+        <div class="level-icon">⚠️</div>
+        <div class="level-num">L2</div>
+        <div class="level-name">75% 仓位</div>
+        <div class="level-trigger">1/3 信号触发</div>
+        <div class="level-desc">一个信号亮红灯，市场开始出现风险苗头。减杠杆偏进攻：TQQQ 50% + QQQ 40% + 现金 10%。</div>
+      </div>
+      <div class="level-card l3">
+        <div class="level-icon">🛡️</div>
+        <div class="level-num">L3</div>
+        <div class="level-name">50% 仓位</div>
+        <div class="level-trigger">2/3 信号触发</div>
+        <div class="level-desc">两个信号同时亮红灯，市场风险明显加大。去杠杆防守：QQQ 50% + 现金 50%。</div>
+      </div>
+      <div class="level-card l4">
+        <div class="level-icon">🧱</div>
+        <div class="level-num">L4</div>
+        <div class="level-name">25% 仓位</div>
+        <div class="level-trigger">3/3 信号触发</div>
+        <div class="level-desc">三个信号全部亮红灯，市场极度危险。QQQ 25% + 现金 75%，大部分转现金避风。</div>
+      </div>
+      <div class="level-card l5">
+        <div class="level-icon">🏃</div>
+        <div class="level-num">L5</div>
+        <div class="level-name">100% 现金</div>
+        <div class="level-trigger">极端情况</div>
+        <div class="level-desc">超过3个信号触发或市场崩盘，全部撤退到现金。等待信号恢复再重新入场。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- === 三大指标说明 === -->
+<div class="indicators-section">
+  <div class="indicators-explain">
+    <div class="indicators-explain-title">三大指标解读</div>
+    <div class="ind-explain-grid">
+      <div class="ind-explain-item">
+        <div class="ind-explain-name">📉 回撤深度 (DD)</div>
+        <div class="ind-explain-desc">当前价格相对于历史峰值的跌幅。回撤越大说明市场越低迷，是衡量风险最直观的指标。</div>
+        <div class="ind-explain-threshold">阈值: DD ≤ -10%</div>
+      </div>
+      <div class="ind-explain-item">
+        <div class="ind-explain-name">😱 恐慌指数 (VIX)</div>
+        <div class="ind-explain-desc">芝加哥期权交易所波动率指数，反映市场对未来30天的恐慌预期。VIX飙升意味着市场极度恐慌。</div>
+        <div class="ind-explain-threshold">阈值: VIX ≥ 22</div>
+      </div>
+      <div class="ind-explain-item">
+        <div class="ind-explain-name">💰 Shiller CAPE</div>
+        <div class="ind-explain-desc">耶鲁教授罗伯特·席勒的周期调整市盈率，用10年平均盈利计算PE，消除短期波动干扰，衡量长期估值水平。</div>
+        <div class="ind-explain-threshold">阈值: CAPE ≥ 35</div>
+      </div>
+      <div class="ind-explain-item">
+        <div class="ind-explain-name">📊 QQQ PE 估值</div>
+        <div class="ind-explain-desc">纳斯达克100 ETF的市盈率，反映科技股整体估值。PE越高说明市场越贵，下跌风险越大。</div>
+        <div class="ind-explain-threshold">阈值: PE ≥ 35</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- === 历史极值与关键时刻 === -->
+<div class="milestones-section">
+  <div class="milestones-card">
+    <div class="milestones-title">历史极值与关键时刻</div>
+
+    <!-- 四个指标历史极值 -->
+    <div class="extremes-grid">
+      <div class="extreme-card">
+        <div class="extreme-name" style="color:#9c27b0">📉 SPY 回撤 (DD)</div>
+        <div class="extreme-row"><span class="extreme-label">最深回撤</span><span class="extreme-val danger" id="spy-dd-min"></span></div>
+        <div class="extreme-row"><span class="extreme-label">最小回撤</span><span class="extreme-val safe" id="spy-dd-max"></span></div>
+        <div class="extreme-row"><span class="extreme-label">当前值</span><span class="extreme-val" id="spy-dd-cur"></span></div>
+      </div>
+      <div class="extreme-card">
+        <div class="extreme-name" style="color:#9c27b0">📉 QQQ 回撤 (DD)</div>
+        <div class="extreme-row"><span class="extreme-label">最深回撤</span><span class="extreme-val danger" id="qqq-dd-min"></span></div>
+        <div class="extreme-row"><span class="extreme-label">最小回撤</span><span class="extreme-val safe" id="qqq-dd-max"></span></div>
+        <div class="extreme-row"><span class="extreme-label">当前值</span><span class="extreme-val" id="qqq-dd-cur"></span></div>
+      </div>
+      <div class="extreme-card">
+        <div class="extreme-name" style="color:#f44336">😱 VIX 恐慌指数</div>
+        <div class="extreme-row"><span class="extreme-label">历史最高</span><span class="extreme-val danger" id="vix-max"></span></div>
+        <div class="extreme-row"><span class="extreme-label">历史最低</span><span class="extreme-val safe" id="vix-min"></span></div>
+        <div class="extreme-row"><span class="extreme-label">当前值</span><span class="extreme-val" id="vix-cur"></span></div>
+      </div>
+      <div class="extreme-card">
+        <div class="extreme-name" style="color:#ff9800">💰 Shiller CAPE</div>
+        <div class="extreme-row"><span class="extreme-label">历史最高</span><span class="extreme-val danger" id="cape-max"></span></div>
+        <div class="extreme-row"><span class="extreme-label">历史最低</span><span class="extreme-val safe" id="cape-min"></span></div>
+        <div class="extreme-row"><span class="extreme-label">当前值</span><span class="extreme-val" id="cape-cur"></span></div>
+      </div>
+      <div class="extreme-card">
+        <div class="extreme-name" style="color:#ff9800">📊 QQQ PE 估值</div>
+        <div class="extreme-row"><span class="extreme-label">历史最高</span><span class="extreme-val danger" id="qqq-pe-max"></span></div>
+        <div class="extreme-row"><span class="extreme-label">历史最低</span><span class="extreme-val safe" id="qqq-pe-min"></span></div>
+        <div class="extreme-row"><span class="extreme-label">当前值</span><span class="extreme-val" id="qqq-pe-cur"></span></div>
+      </div>
+    </div>
+
+    <!-- 关键历史时刻 -->
+    <div class="events-title">关键历史时刻</div>
+    <div class="events-table" id="events-table"></div>
+  </div>
+</div>
+
+<!-- === 25级趋势评分速查表 === -->
+<div class="trend-section">
+  <div class="trend-card">
+    <div class="trend-title">25级趋势评分速查表</div>
+    <div class="trend-subtitle">
+      <b>SPY/SPXL</b>：直接用25级评分做调仓决策（DD=-2, VIX=16, CAPE=41, scale=5），收益优于5级方案。<br>
+      <b>QQQ/TQQQ</b>：5级信号做调仓决策，25级趋势评分仅做预警参考。<br>
+      每级总仓位-4%：S1满仓杠杆(SPXL/TQQQ 75%) → S25全现金。
+    </div>
+    <div class="trend-table-wrap">
+      <table class="trend-table">
+        <thead>
+          <tr>
+            <th>级别</th>
+            <th>评分范围</th>
+            <th>TQQQ<br>SPXL</th>
+            <th>QQQ<br>SPY</th>
+            <th>现金</th>
+            <th>含义</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="trend-safe">
+            <td class="td-step">S1</td>
+            <td class="td-score">0.00 - 0.33</td>
+            <td class="td-tqqq">75.0%</td>
+            <td class="td-qqq">25.0%</td>
+            <td class="td-cash">0.0%</td>
+            <td class="td-meaning">满仓杠杆</td>
+          </tr>
+          <tr class="trend-safe">
+            <td class="td-step">S2</td>
+            <td class="td-score">0.33 - 0.66</td>
+            <td class="td-tqqq">65.5%</td>
+            <td class="td-qqq">30.5%</td>
+            <td class="td-cash">4.0%</td>
+            <td class="td-meaning">满仓杠杆</td>
+          </tr>
+          <tr class="trend-safe">
+            <td class="td-step">S3</td>
+            <td class="td-score">0.66 - 0.99</td>
+            <td class="td-tqqq">56.5%</td>
+            <td class="td-qqq">35.5%</td>
+            <td class="td-cash">8.0%</td>
+            <td class="td-meaning">满仓杠杆</td>
+          </tr>
+          <tr class="trend-mild">
+            <td class="td-step">S4</td>
+            <td class="td-score">0.99 - 1.32</td>
+            <td class="td-tqqq">48.0%</td>
+            <td class="td-qqq">40.0%</td>
+            <td class="td-cash">12.0%</td>
+            <td class="td-meaning">高杠杆</td>
+          </tr>
+          <tr class="trend-mild">
+            <td class="td-step">S5</td>
+            <td class="td-score">1.32 - 1.65</td>
+            <td class="td-tqqq">40.1%</td>
+            <td class="td-qqq">43.9%</td>
+            <td class="td-cash">16.0%</td>
+            <td class="td-meaning">高杠杆</td>
+          </tr>
+          <tr class="trend-mild">
+            <td class="td-step">S6</td>
+            <td class="td-score">1.65 - 1.98</td>
+            <td class="td-tqqq">32.7%</td>
+            <td class="td-qqq">47.3%</td>
+            <td class="td-cash">20.0%</td>
+            <td class="td-meaning">高杠杆</td>
+          </tr>
+          <tr class="trend-mild">
+            <td class="td-step">S7</td>
+            <td class="td-score">1.98 - 2.31</td>
+            <td class="td-tqqq">25.9%</td>
+            <td class="td-qqq">50.1%</td>
+            <td class="td-cash">24.0%</td>
+            <td class="td-meaning">偏进攻</td>
+          </tr>
+          <tr class="trend-mild">
+            <td class="td-step">S8</td>
+            <td class="td-score">2.31 - 2.64</td>
+            <td class="td-tqqq">19.6%</td>
+            <td class="td-qqq">52.4%</td>
+            <td class="td-cash">28.0%</td>
+            <td class="td-meaning">偏进攻</td>
+          </tr>
+          <tr class="trend-mild">
+            <td class="td-step">S9</td>
+            <td class="td-score">2.64 - 2.97</td>
+            <td class="td-tqqq">13.9%</td>
+            <td class="td-qqq">54.1%</td>
+            <td class="td-cash">32.0%</td>
+            <td class="td-meaning">偏进攻</td>
+          </tr>
+          <tr class="trend-mid">
+            <td class="td-step">S10</td>
+            <td class="td-score">2.97 - 3.30</td>
+            <td class="td-tqqq">8.7%</td>
+            <td class="td-qqq">55.3%</td>
+            <td class="td-cash">36.0%</td>
+            <td class="td-meaning">半杠杆</td>
+          </tr>
+          <tr class="trend-mid">
+            <td class="td-step">S11</td>
+            <td class="td-score">3.30 - 3.63</td>
+            <td class="td-tqqq">4.1%</td>
+            <td class="td-qqq">55.9%</td>
+            <td class="td-cash">40.0%</td>
+            <td class="td-meaning">半杠杆</td>
+          </tr>
+          <tr class="trend-mid">
+            <td class="td-step">S12</td>
+            <td class="td-score">3.63 - 3.96</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">56.0%</td>
+            <td class="td-cash">44.0%</td>
+            <td class="td-meaning">半杠杆</td>
+          </tr>
+          <tr class="trend-mid">
+            <td class="td-step">S13</td>
+            <td class="td-score">3.96 - 4.29</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">52.0%</td>
+            <td class="td-cash">48.0%</td>
+            <td class="td-meaning">去杠杆</td>
+          </tr>
+          <tr class="trend-mid">
+            <td class="td-step">S14</td>
+            <td class="td-score">4.29 - 4.62</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">48.0%</td>
+            <td class="td-cash">52.0%</td>
+            <td class="td-meaning">去杠杆</td>
+          </tr>
+          <tr class="trend-mid">
+            <td class="td-step">S15</td>
+            <td class="td-score">4.62 - 4.95</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">44.0%</td>
+            <td class="td-cash">56.0%</td>
+            <td class="td-meaning">去杠杆</td>
+          </tr>
+          <tr class="trend-warn">
+            <td class="td-step">S16</td>
+            <td class="td-score">4.95 - 5.28</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">40.0%</td>
+            <td class="td-cash">60.0%</td>
+            <td class="td-meaning">中性</td>
+          </tr>
+          <tr class="trend-warn">
+            <td class="td-step">S17</td>
+            <td class="td-score">5.28 - 5.61</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">36.0%</td>
+            <td class="td-cash">64.0%</td>
+            <td class="td-meaning">中性</td>
+          </tr>
+          <tr class="trend-warn">
+            <td class="td-step">S18</td>
+            <td class="td-score">5.61 - 5.94</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">32.0%</td>
+            <td class="td-cash">68.0%</td>
+            <td class="td-meaning">中性</td>
+          </tr>
+          <tr class="trend-warn">
+            <td class="td-step">S19</td>
+            <td class="td-score">5.94 - 6.27</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">28.0%</td>
+            <td class="td-cash">72.0%</td>
+            <td class="td-meaning">防守</td>
+          </tr>
+          <tr class="trend-warn">
+            <td class="td-step">S20</td>
+            <td class="td-score">6.27 - 6.60</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">24.0%</td>
+            <td class="td-cash">76.0%</td>
+            <td class="td-meaning">防守</td>
+          </tr>
+          <tr class="trend-warn">
+            <td class="td-step">S21</td>
+            <td class="td-score">6.60 - 6.93</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">20.0%</td>
+            <td class="td-cash">80.0%</td>
+            <td class="td-meaning">防守</td>
+          </tr>
+          <tr class="trend-danger">
+            <td class="td-step">S22</td>
+            <td class="td-score">6.93 - 7.26</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">16.0%</td>
+            <td class="td-cash">84.0%</td>
+            <td class="td-meaning">重防守</td>
+          </tr>
+          <tr class="trend-danger">
+            <td class="td-step">S23</td>
+            <td class="td-score">7.26 - 7.59</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">12.0%</td>
+            <td class="td-cash">88.0%</td>
+            <td class="td-meaning">重防守</td>
+          </tr>
+          <tr class="trend-danger">
+            <td class="td-step">S24</td>
+            <td class="td-score">7.59 - 7.92</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">8.0%</td>
+            <td class="td-cash">92.0%</td>
+            <td class="td-meaning">重防守</td>
+          </tr>
+          <tr class="trend-danger">
+            <td class="td-step">S25</td>
+            <td class="td-score">>= 7.92</td>
+            <td class="td-tqqq">0%</td>
+            <td class="td-qqq">4.0%</td>
+            <td class="td-cash">96.0%</td>
+            <td class="td-meaning">全现金</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="trend-legend">
+      <div class="trend-legend-item"><span class="trend-legend-dot safe"></span> S1-S3 满仓杠杆（SPXL/TQQQ 75%→56%）</div>
+      <div class="trend-legend-item"><span class="trend-legend-dot mild"></span> S4-S9 高杠杆/偏进攻（SPXL/TQQQ 48%→14%）</div>
+      <div class="trend-legend-item"><span class="trend-legend-dot mid"></span> S10-S15 半杠杆/去杠杆（SPXL/TQQQ→0%）</div>
+      <div class="trend-legend-item"><span class="trend-legend-dot warn"></span> S16-S21 中性/防守（全部SPY/QQQ+现金）</div>
+      <div class="trend-legend-item"><span class="trend-legend-dot danger"></span> S22-S25 重防守/全现金</div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  数据来源: Yahoo Finance + multpl.com (Shiller CAPE) | 日度数据 | 仅供参考，不构成投资建议
+  <br>生成时间: <span id="gen-time"></span>
+</div>
+
+<!-- ECharts CDN -->
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+
+<!-- 数据 + 逻辑 -->
+<script>
+/* === 嵌入数据 === */
+var DATA = %EMBED_DATA%;
+var currentView = 'spy';
+var chart = null;
+
+/* === 工具函数 === */
+function dateToTimestamp(dateStr) {
+  /* 支持 YYYY-MM-DD 和 YYYY-MM 格式 */
+  var parts = dateStr.split('-');
+  var y = parseInt(parts[0], 10);
+  var m = parseInt(parts[1], 10);
+  var d = parts.length >= 3 ? parseInt(parts[2], 10) : 1;
+  return Date.UTC(y, m - 1, d);
+}
+
+/* === 摘要卡片 === */
+function renderSummary() {
+  var card = document.getElementById('summary-card');
+  if (!card) return;
+  var today = DATA.today;
+  var sigs = currentView === 'spy' ? today.sp500_signals : today.nasdaq100_signals;
+  var viewLabel = currentView === 'spy' ? '标普500' : '纳斯达克100';
+  var price = currentView === 'spy' ? today.spy_price : today.qqq_price;
+
+  var posLevel = sigs.triggered_count + 1;
+  var posName = sigs.position[0];
+  var posDesc = sigs.position[1];
+
+  var h = '<div class="summary-title"><span>今日' + viewLabel + '信号摘要</span><span class="date">' + DATA.generated_at + '</span></div>';
+  h += '<div class="indicators-grid">';
+
+  for (var i = 0; i < sigs.signals.length; i++) {
+    var s = sigs.signals[i];
+    var cls = s.triggered ? 'signal-triggered' : 'signal-normal';
+    var stCls = s.triggered ? 'status-triggered' : 'status-normal';
+    var stIcon = s.triggered ? '⚠️' : '✅';
+    var stText = s.triggered ? '已触发 (阈值' + s.threshold + ')' : '正常';
+    var vt = '';
+    if (s.name.indexOf('回撤') >= 0) {
+      vt = s.value === 0 ? '0% (历史新高)' : s.value + '%';
+    }
+    else if (s.name.indexOf('CAPE') >= 0 || s.name.indexOf('PE') >= 0 || s.name.indexOf('估值') >= 0) { vt = s.value; }
+    else if (s.name.indexOf('恐慌') >= 0 || s.name.indexOf('VIX') >= 0) { vt = s.value; }
+    else { vt = '$' + price; }
+
+    h += '<div class="indicator-item ' + cls + '">';
+    h += '<div class="indicator-name">' + s.name + '</div>';
+    h += '<div class="indicator-value">' + vt + '</div>';
+    h += '<div class="indicator-status ' + stCls + '">' + stIcon + ' ' + stText + '</div>';
+    h += '</div>';
+  }
+
+  h += '<div class="indicator-item" style="border-left:none;background:transparent;padding:0">';
+  h += '<div class="position-box level-' + posLevel + '" style="margin:0">';
+  h += '<div class="position-label">' + sigs.triggered_count + '/3 信号触发</div>';
+  h += '<div class="position-value">' + posName + '</div>';
+  h += '<div class="position-desc">' + posDesc + '</div>';
+  h += '</div></div>';
+  h += '</div>';
+  
+  /* 趋势评分 + 仓位配比 */
+  var trend = DATA.today.trend;
+  if (trend && Object.keys(trend).length > 0) {
+    var isSpy = currentView === 'spy';
+    var tr = isSpy ? trend.spy_trend : trend.qqq_trend;
+    var allocStr = isSpy ? trend.spy_alloc_str : trend.qqq_alloc_str;
+    var prevStr = isSpy ? trend.spy_prev_alloc_str : trend.qqq_prev_alloc_str;
+    var changed = isSpy ? trend.spy_alloc_changed : trend.qqq_alloc_changed;
+    
+    if (tr) {
+      h += '<div class="trend-alloc-row">';
+      h += '<span class="trend-score">📊 趋势评分: <span class="score-val">' + tr.score + '</span> (S' + tr.step + ') <span class="score-dir">' + tr.trend_dir + ' ' + tr.trend_hint + '</span></span>';
+      if (changed && prevStr) {
+        h += '<span class="alloc-info">💰 仓位: <span class="alloc-prev">' + prevStr + '</span> <span class="alloc-arrow">➡️</span> <span class="alloc-current">' + allocStr + '</span></span>';
+      } else {
+        h += '<span class="alloc-info">💰 仓位: <span class="alloc-current">' + allocStr + '</span></span>';
+      }
+      h += '</div>';
+    }
+  }
+  
+  card.innerHTML = h;
+}
+
+/* === 渲染历史极值 === */
+function renderMilestones() {
+  var ms = DATA.milestones;
+  if (!ms) return;
+
+  /* SPY DD */
+  var spyDD = ms.spy_dd;
+  document.getElementById('spy-dd-min').innerHTML = spyDD.min + '% <span class="date-tag">' + spyDD.min_date + '</span>';
+  document.getElementById('spy-dd-max').innerHTML = spyDD.max + '% <span class="date-tag">' + spyDD.max_date + '</span>';
+  document.getElementById('spy-dd-cur').innerHTML = DATA.today.spy_dd + '%';
+
+  /* QQQ DD */
+  var qqqDD = ms.qqq_dd;
+  document.getElementById('qqq-dd-min').innerHTML = qqqDD.min + '% <span class="date-tag">' + qqqDD.min_date + '</span>';
+  document.getElementById('qqq-dd-max').innerHTML = qqqDD.max + '% <span class="date-tag">' + qqqDD.max_date + '</span>';
+  document.getElementById('qqq-dd-cur').innerHTML = DATA.today.qqq_dd + '%';
+
+  /* VIX */
+  var vixE = ms.vix;
+  document.getElementById('vix-max').innerHTML = vixE.max + ' <span class="date-tag">' + vixE.max_date + '</span>';
+  document.getElementById('vix-min').innerHTML = vixE.min + ' <span class="date-tag">' + vixE.min_date + '</span>';
+  document.getElementById('vix-cur').innerHTML = DATA.today.vix;
+
+  /* CAPE */
+  var capeE = ms.cape;
+  document.getElementById('cape-max').innerHTML = capeE.max + ' <span class="date-tag">' + capeE.max_date + '</span>';
+  document.getElementById('cape-min').innerHTML = capeE.min + ' <span class="date-tag">' + capeE.min_date + '</span>';
+  document.getElementById('cape-cur').innerHTML = DATA.today.cape;
+
+  /* QQQ PE */
+  var peE = ms.qqq_pe;
+  document.getElementById('qqq-pe-max').innerHTML = peE.max + ' <span class="date-tag">' + peE.max_date + '</span>';
+  document.getElementById('qqq-pe-min').innerHTML = peE.min + ' <span class="date-tag">' + peE.min_date + '</span>';
+  document.getElementById('qqq-pe-cur').innerHTML = DATA.today.qqq_pe;
+
+  /* 关键历史时刻表格 */
+  var events = ms.key_events;
+  if (!events || events.length === 0) return;
+
+  var el = document.getElementById('events-table');
+  var h = '';
+
+  /* 表头 */
+  h += '<div class="events-row header">';
+  h += '<div>事件</div>';
+  h += '<div>日期</div>';
+  h += '<div>SPY DD</div>';
+  h += '<div>QQQ DD</div>';
+  h += '<div>VIX</div>';
+  h += '<div>CAPE</div>';
+  h += '<div>QQQ PE</div>';
+  h += '</div>';
+
+  for (var i = 0; i < events.length; i++) {
+    var ev = events[i];
+    var ddCls = ev.spy_dd <= -10 ? 'red' : 'green';
+    var qddCls = ev.qqq_dd <= -10 ? 'red' : 'green';
+    var vixCls = ev.vix >= 22 ? 'red' : 'green';
+    var capeCls = ev.cape >= 35 ? 'orange' : 'green';
+    var peCls = ev.qqq_pe >= 35 ? 'orange' : 'green';
+
+    h += '<div class="events-row">';
+    h += '<div class="event-label">' + ev.label + '</div>';
+    h += '<div class="event-date">' + ev.actual_date + '</div>';
+    h += '<div class="event-val ' + ddCls + '">' + ev.spy_dd + '%</div>';
+    h += '<div class="event-val ' + qddCls + '">' + ev.qqq_dd + '%</div>';
+    h += '<div class="event-val ' + vixCls + '">' + ev.vix + '</div>';
+    h += '<div class="event-val ' + capeCls + '">' + ev.cape + '</div>';
+    h += '<div class="event-val ' + peCls + '">' + ev.qqq_pe + '</div>';
+    h += '</div>';
+  }
+
+  el.innerHTML = h;
+}
+
+/* === 构建图表选项 === */
+/* series data = [timestamp, normValue, rawValue]
+   tooltip 直接取 p.value[2] 作为真实数值 */
+function buildOption(view) {
+  var dates = DATA.dates;
+  var priceData = view === 'spy' ? DATA.spy : DATA.qqq;
+  var ind3Data = view === 'spy' ? DATA.cape : DATA.qqq_pe;
+
+  var priceNorm = priceData.price_norm;
+  var ddNorm    = priceData.dd_norm;
+  var vixNorm   = DATA.vix.norm;
+  var ind3Norm  = ind3Data.norm;
+
+  var priceRaw = priceData.price_raw;
+  var ddRaw    = priceData.dd_raw;
+  var vixRaw   = DATA.vix.raw;
+  var ind3Raw  = ind3Data.raw;
+
+  var priceLabel = view === 'spy' ? 'SPY 价格' : 'QQQ 价格';
+  var ddLabel    = view === 'spy' ? 'SPY 回撤' : 'QQQ 回撤';
+  var ind3Label  = view === 'spy' ? 'Shiller CAPE' : 'QQQ PE';
+
+  /* 构建 series 数据：[timestamp, normValue, rawValue] */
+  var priceSeries = [];
+  var ddSeries = [];
+  var vixSeries = [];
+  var ind3Series = [];
+  for (var i = 0; i < dates.length; i++) {
+    var ts = dateToTimestamp(dates[i]);
+    priceSeries.push([ts, priceNorm[i], priceRaw[i]]);
+    ddSeries.push([ts, ddNorm[i], ddRaw[i]]);
+    vixSeries.push([ts, vixNorm[i], vixRaw[i]]);
+    ind3Series.push([ts, ind3Norm[i], ind3Raw[i]]);
+  }
+
+  /* 阈值归一化位置 */
+  var ddMin = priceData.dd_min;
+  var ddMax = priceData.dd_max;
+  var vixMin = DATA.vix.min;
+  var vixMax = DATA.vix.max;
+  var ind3Min = ind3Data.min;
+  var ind3Max = ind3Data.max;
+
+  var ind3TH_norm;
+  if (view === 'spy') { ind3TH_norm = (35 - ind3Min) / (ind3Max - ind3Min); }
+  else { ind3TH_norm = (35 - ind3Min) / (ind3Max - ind3Min); }
+
+  var vixTH_norm = (22 - vixMin) / (vixMax - vixMin);
+  var ddTH_norm = 1 - (-10 - ddMin) / (ddMax - ddMin); /* inverted: 大DD→高 */
+
+  /* 事件标注线 — 使用具体日期 */
+  var eventLines = [];
+  var events = [
+    { date: '2000-03-10', name: '互联网泡沫峰值' },
+    { date: '2008-10-15', name: '金融海啸深渊' },
+    { date: '2020-03-23', name: 'COVID暴跌' },
+    { date: '2022-06-16', name: '2022熊市' }
+  ];
+  for (var i = 0; i < events.length; i++) {
+    eventLines.push({
+      xAxis: dateToTimestamp(events[i].date),
+      label: { formatter: events[i].name, position: 'insideEndTop', fontSize: 11, color: '#c55' },
+      lineStyle: { color: '#c55', type: 'dashed', width: 1.5 }
+    });
+  }
+
+  /* 阈值标注线 */
+  var thresholdLines = [
+    {
+      yAxis: ind3TH_norm,
+      label: { formatter: view === 'spy' ? 'CAPE≥35' : 'PE≥35', position: 'insideStartTop', fontSize: 11, color: '#ff9800' },
+      lineStyle: { color: '#ff9800', type: 'dashed', width: 1.5 }
+    },
+    {
+      yAxis: vixTH_norm,
+      label: { formatter: 'VIX≥22', position: 'insideStartTop', fontSize: 11, color: '#f44336' },
+      lineStyle: { color: '#f44336', type: 'dashed', width: 1.5 }
+    },
+    {
+      yAxis: ddTH_norm,
+      label: { formatter: 'DD≤-10%', position: 'insideStartTop', fontSize: 11, color: '#9c27b0' },
+      lineStyle: { color: '#9c27b0', type: 'dashed', width: 1.5 }
+    }
+  ];
+
+  /* === Tooltip: 直接从 p.value[2] 取原始真实值 === */
+  function tipFmt(params) {
+    if (!params || params.length === 0) return '';
+    var dateObj = new Date(params[0].axisValue);
+    var y = dateObj.getFullYear();
+    var m = dateObj.getMonth() + 1;
+    var d = dateObj.getDate();
+    var h = '<div style="font-weight:600;margin-bottom:8px;font-size:14px">' + y + '年' + m + '月' + d + '日</div>';
+
+    for (var i = 0; i < params.length; i++) {
+      var p = params[i];
+      var nm = p.seriesName;
+      var rawVal, unit;
+
+      /* 直接从数据点取第3个元素 = 原始真实值 */
+      if (p.value && p.value.length >= 3) {
+        rawVal = p.value[2];
+      } else {
+        rawVal = p.value;
+      }
+
+      /* 格式化单位和值 */
+      if (nm.indexOf('价格') >= 0) {
+        unit = '$';
+      } else if (nm.indexOf('回撤') >= 0) {
+        unit = '%';
+        if (rawVal === 0) rawVal = '0 (历史新高)';
+      } else {
+        unit = '';
+      }
+
+      h += '<div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:13px">';
+      h += '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + p.color + '"></span>';
+      h += '<span>' + nm + ': <b>' + unit + rawVal + '</b></span></div>';
+    }
+
+    h += '<div style="margin-top:8px;padding-top:6px;border-top:1px solid #eee;font-size:11px;color:#888">';
+    h += '归一化值仅用于图表对齐，上方为真实数值</div>';
+    return h;
+  }
+
+  /* 日度数据量大，优化渲染：小symbolSize + 大数据量采样 */
+  var isDaily = DATA.granularity === 'daily';
+  var sampleThreshold = isDaily ? 5000 : 0;
+
+  return {
+    animation: isDaily ? false : true,
+    animationDuration: isDaily ? 0 : 600,
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross', crossStyle: { color: '#999' } },
+      formatter: tipFmt
+    },
+    legend: {
+      data: [priceLabel, ddLabel, 'VIX 恐慌指数', ind3Label],
+      top: 10,
+      textStyle: { fontSize: 13 }
+    },
+    grid: { left: 90, right: 30, top: 60, bottom: 100 },
+    xAxis: {
+      type: 'time',
+      boundaryGap: false,
+      axisLabel: {
+        fontSize: 11,
+        formatter: function(val) {
+          var d = new Date(val);
+          return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
+        }
+      }
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      max: 1,
+      splitNumber: 5,
+      axisLabel: {
+        fontSize: 11,
+        color: '#666',
+        formatter: function(val) {
+          if (val <= 0.2) return '🟢 安全区';
+          if (val <= 0.4) return '🟡 警惕区';
+          if (val <= 0.6) return '🟠 偏贵区';
+          if (val <= 0.8) return '🔴 危险区';
+          return '⛔ 极危区';
+        }
+      }
+    },
+    dataZoom: [
+      {
+        type: 'slider',
+        xAxisIndex: 0,
+        start: 85,
+        end: 100,
+        bottom: 20,
+        height: 30,
+        borderColor: '#ccc',
+        fillerColor: 'rgba(58,110,165,0.15)',
+        handleStyle: { color: '#3a6ea5' },
+        textStyle: { fontSize: 11 },
+        labelFormatter: function(val) {
+          var d = new Date(val);
+          return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
+        }
+      },
+      {
+        type: 'inside',
+        xAxisIndex: 0,
+        start: 85,
+        end: 100
+      }
+    ],
+    series: [
+      {
+        name: priceLabel,
+        type: 'line',
+        data: priceSeries,
+        lineStyle: { width: 2.5, color: '#2962ff' },
+        itemStyle: { color: '#2962ff' },
+        symbol: 'none',
+        showSymbol: false,
+        smooth: isDaily ? false : true,
+        z: 10,
+        markLine: {
+          silent: true,
+          symbol: 'none',
+          animation: false,
+          data: eventLines
+        }
+      },
+      {
+        name: ddLabel,
+        type: 'line',
+        data: ddSeries,
+        lineStyle: { width: 2, color: '#9c27b0' },
+        itemStyle: { color: '#9c27b0' },
+        symbol: 'none',
+        showSymbol: false,
+        smooth: isDaily ? false : true,
+        z: 5,
+        markLine: {
+          silent: true,
+          symbol: 'none',
+          animation: false,
+          data: [thresholdLines[2]]
+        }
+      },
+      {
+        name: 'VIX 恐慌指数',
+        type: 'line',
+        data: vixSeries,
+        lineStyle: { width: 1.5, color: '#f44336', type: 'dotted' },
+        itemStyle: { color: '#f44336' },
+        symbol: 'none',
+        showSymbol: false,
+        smooth: isDaily ? false : true,
+        z: 5,
+        markLine: {
+          silent: true,
+          symbol: 'none',
+          animation: false,
+          data: [thresholdLines[1]]
+        }
+      },
+      {
+        name: ind3Label,
+        type: 'line',
+        data: ind3Series,
+        lineStyle: { width: 2, color: '#ff9800' },
+        itemStyle: { color: '#ff9800' },
+        symbol: 'none',
+        showSymbol: false,
+        smooth: isDaily ? false : true,
+        z: 5,
+        markLine: {
+          silent: true,
+          symbol: 'none',
+          animation: false,
+          data: [thresholdLines[0]]
+        }
+      }
+    ]
+  };
+}
+
+/* === 视图切换 === */
+function switchView(view) {
+  currentView = view;
+  document.getElementById('btn-spy').className = 'switch-btn' + (view === 'spy' ? ' active' : '');
+  document.getElementById('btn-qqq').className = 'switch-btn' + (view === 'qqq' ? ' active' : '');
+  renderSummary();
+  if (chart) {
+    chart.setOption(buildOption(view), true);
+  }
+}
+
+/* === 时间范围快捷 — 适配日度数据 === */
+function setRange(range) {
+  var total = DATA.dates.length;
+  var startP = 0, endP = 100;
+
+  /* 根据日度数据估算各范围（1年≈252交易日） */
+  if (range === '3m') startP = Math.max(0, (total - 63) / total * 100);
+  else if (range === '6m') startP = Math.max(0, (total - 126) / total * 100);
+  else if (range === '1y') startP = Math.max(0, (total - 252) / total * 100);
+  else if (range === '3y') startP = Math.max(0, (total - 756) / total * 100);
+  else if (range === '5y') startP = Math.max(0, (total - 1260) / total * 100);
+  else if (range === '10y') startP = Math.max(0, (total - 2520) / total * 100);
+  else if (range === 'all') startP = 0;
+  else if (range === 'dotcom') {
+    /* 找到包含 1998-01 ~ 2003-06 的范围 */
+    startP = findDatePercent('1998-01-02');
+    endP = findDatePercent('2003-06-30') + 1;
+  }
+  else if (range === 'financial') {
+    startP = findDatePercent('2007-01-02');
+    endP = findDatePercent('2010-06-30') + 1;
+  }
+  else if (range === 'covid') {
+    startP = findDatePercent('2019-06-03');
+    endP = findDatePercent('2021-06-30') + 1;
+  }
+  else if (range === '2022bear') {
+    startP = findDatePercent('2021-12-01');
+    endP = findDatePercent('2023-06-30') + 1;
+  }
+
+  endP = Math.min(100, endP);
+  startP = Math.max(0, startP);
+  if (chart) {
+    chart.dispatchAction({ type: 'dataZoom', start: startP, end: endP });
+  }
+}
+
+/* 在日期数组中找到目标日期附近的位置百分比 */
+function findDatePercent(targetDate) {
+  var dates = DATA.dates;
+  /* 找到 >= targetDate 的第一个日期 */
+  for (var i = 0; i < dates.length; i++) {
+    if (dates[i] >= targetDate) {
+      return i / dates.length * 100;
+    }
+  }
+  return 0;
+}
+
+/* === 初始化 === */
+function initApp() {
+  if (typeof echarts === 'undefined') {
+    document.getElementById('main-chart').innerHTML =
+      '<div style="text-align:center;padding:60px;color:#f44336;font-size:16px">' +
+      'ECharts 加载失败，请检查网络后刷新页面</div>';
+    return;
+  }
+
+  document.getElementById('gen-time').textContent = DATA.generated_at;
+  renderSummary();
+  renderMilestones();
+
+  var el = document.getElementById('main-chart');
+  chart = echarts.init(el);
+  chart.setOption(buildOption(currentView));
+
+  window.addEventListener('resize', function() {
+    if (chart) chart.resize();
+  });
+}
+
+/* 启动 */
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
+</script>
+
+</body>
+</html>
